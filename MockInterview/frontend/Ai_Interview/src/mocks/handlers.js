@@ -38,4 +38,57 @@ export const handlers = [
       { start: 5.2, end: 8.0, text: "영상과 그래프가 싱크됩니다." },
     ]);
   }),
+
+    http.get("/api/questions", async (req) => {
+    const q = getQuery(req);
+    const source = q.get("source") || "COMMON"; // "COMMON" | "RESUME"
+    const limit = Number(q.get("limit") || 50);
+
+    let data = [];
+    if (source === "COMMON") data = commonQs;
+    else if (source === "RESUME") data = resumeQs;
+
+    return HttpResponse.json(data.slice(0, limit), { status: 200 });
+  }),
+
+  // 커스텀 질문 목록
+  http.get("/api/custom-questions", async () => {
+    return HttpResponse.json(customQs, { status: 200 });
+  }),
+
+  // 커스텀 질문 추가
+  http.post("/api/custom-questions", async ({ request }) => {
+    const body = await request.json().catch(() => ({}));
+    const text = (body?.text || "").toString().trim();
+    if (!text) {
+      return HttpResponse.json({ message: "text is required" }, { status: 400 });
+    }
+    const item = { questionId: ++seq, text, source: "CUSTOM" };
+    customQs = [item, ...customQs];
+    return HttpResponse.json(item, { status: 201 });
+  }),
+
+  // 커스텀 질문 삭제
+  http.delete("/api/custom-questions/:questionId", async ({ params }) => {
+    const id = Number(params.questionId);
+    const exists = customQs.some((q) => q.questionId === id);
+    if (!exists) {
+      return HttpResponse.json({ message: "not found" }, { status: 404 });
+    }
+    customQs = customQs.filter((q) => q.questionId !== id);
+    return HttpResponse.json({ ok: true }, { status: 200 });
+  }),
+
+  // 면접 세션 생성 (선택 질문 ID 배열을 받아 세션ID 발급)
+  http.post("/api/interviews", async ({ request }) => {
+    const body = await request.json().catch(() => ({}));
+    const questionIds = Array.isArray(body?.questionIds) ? body.questionIds : [];
+    if (questionIds.length === 0) {
+      return HttpResponse.json({ message: "questionIds required" }, { status: 400 });
+    }
+    const sessionId = `sess_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    return HttpResponse.json({ sessionId }, { status: 201 });
+  }),
+
+  
 ];

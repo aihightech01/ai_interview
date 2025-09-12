@@ -10,6 +10,8 @@ const TABS = [
 ];
 
 function Header() {
+  // 로그인 상태는 라우팅 전환 시 갱신되도록 storage 이벤트도 고려 가능하지만,
+  // 여기서는 간단히 렌더 시점 기준으로만.
   const isLoggedIn = useMemo(() => !!localStorage.getItem("accessToken"), []);
   return (
     <header className="w-full h-14 border-b bg-white">
@@ -58,19 +60,37 @@ export default function QuestionListPage() {
   const [customItems, setCustomItems] = useState([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  // 탭 전환 시 데이터 로드
+  // 탭 전환 시 데이터 로드 (MSW /api/* 경로 사용)
   useEffect(() => {
+    const ac = new AbortController();
     const run = async () => {
-      if (tab === "CUSTOM") {
-        const { data } = await axiosInstance.get(API_PATHS.CUSTOM_QUESTIONS); // mock GET
-        setCustomItems(Array.isArray(data) ? data : []);
-      } else {
-        const { data } = await axiosInstance.get(`${API_PATHS.QUESTIONS}?source=${tab}&limit=50`);
-        setItems(Array.isArray(data) ? data : []);
+      setLoading(true);
+      try {
+        if (tab === "CUSTOM") {
+          const { data } = await axiosInstance.get(API_PATHS.CUSTOM_QUESTIONS, {
+            signal: ac.signal,
+          });
+          setCustomItems(Array.isArray(data) ? data : []);
+        } else {
+          const { data } = await axiosInstance.get(
+            `${API_PATHS.QUESTIONS}?source=${encodeURIComponent(tab)}&limit=50`,
+            { signal: ac.signal }
+          );
+          setItems(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        if (ac.signal.aborted) return;
+        console.warn("[QuestionList] fetch error:", e);
+        if (tab === "CUSTOM") setCustomItems([]);
+        else setItems([]);
+      } finally {
+        if (!ac.signal.aborted) setLoading(false);
       }
     };
     run();
+    return () => ac.abort();
   }, [tab]);
 
   // 체크 토글 (최대 3개)
@@ -88,32 +108,45 @@ export default function QuestionListPage() {
   // 면접 시작 (mock: 세션 생성)
   async function onStart() {
     if (selected.length === 0) return;
-    const questionIds = selected.map((s) => s.questionId);
-    const { data } = await axiosInstance.post(API_PATHS.INTERVIEWS, { questionIds });
-    nav("/interview/devices", { state: { sessionId: data.sessionId } });
+    try {
+      const questionIds = selected.map((s) => s.questionId);
+      const { data } = await axiosInstance.post(API_PATHS.INTERVIEWS, { questionIds });
+      nav("/interview/devices", { state: { sessionId: data.sessionId } });
+    } catch (e) {
+      console.warn("[QuestionList] start error:", e);
+      alert("세션 생성에 실패했어요. 잠시 후 다시 시도해주세요.");
+    }
   }
 
   // 커스텀 추가/삭제
   async function addCustom() {
-    if (!draft.trim()) return;
+    const text = draft.trim();
+    if (!text) return;
     setBusy(true);
     try {
-      const { data } = await axiosInstance.post(API_PATHS.CUSTOM_QUESTIONS, { text: draft.trim() });
+      const { data } = await axiosInstance.post(API_PATHS.CUSTOM_QUESTIONS, { text });
       setCustomItems((prev) => [data, ...prev]);
       setDraft("");
+    } catch (e) {
+      console.warn("[QuestionList] add custom error:", e);
+      alert("커스텀 질문 추가에 실패했어요.");
     } finally {
       setBusy(false);
     }
   }
+
   async function removeCustom(q) {
     setBusy(true);
     try {
       await axiosInstance.delete(`${API_PATHS.CUSTOM_QUESTIONS}/${q.questionId}`);
+      setCustomItems((prev) => prev.filter((x) => x.questionId !== q.questionId));
+      setSelected((prev) => prev.filter((x) => x.questionId !== q.questionId));
+    } catch (e) {
+      console.warn("[QuestionList] remove custom error:", e);
+      alert("삭제에 실패했어요.");
     } finally {
       setBusy(false);
     }
-    setCustomItems((prev) => prev.filter((x) => x.questionId !== q.questionId));
-    setSelected((prev) => prev.filter((x) => x.questionId !== q.questionId));
   }
 
   // 우측 요약 3칸
@@ -126,6 +159,12 @@ export default function QuestionListPage() {
       <div className="px-6 pb-6">
         <div className="border rounded-lg overflow-hidden">
           <ul className="divide-y">
+            {loading && items.length === 0 && (
+              <li className="p-6 text-sm text-gray-500">불러오는 중…</li>
+            )}
+            {!loading && items.length === 0 && (
+              <li className="p-6 text-sm text-gray-500">불러올 질문이 없습니다.</li>
+            )}
             {items.map((q) => {
               const checked = selected.some((x) => x.questionId === q.questionId);
               return (
@@ -145,16 +184,13 @@ export default function QuestionListPage() {
                 </li>
               );
             })}
-            {items.length === 0 && (
-              <li className="p-6 text-sm text-gray-500">불러올 질문이 없습니다.</li>
-            )}
           </ul>
         </div>
       </div>
     </section>
   );
 
-  // 커스텀 패널 (이미지 동일)
+  // 커스텀 패널
   const CustomPanel = (
     <section className="bg-white border rounded-xl shadow-sm">
       <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
@@ -183,6 +219,12 @@ export default function QuestionListPage() {
         <div className="mt-4 border rounded-lg overflow-hidden">
           <div className="px-4 py-3 text-sm font-medium text-gray-700">내가 만든 질문</div>
           <ul className="divide-y">
+            {loading && customItems.length === 0 && tab === "CUSTOM" && (
+              <li className="p-6 text-sm text-gray-500">불러오는 중…</li>
+            )}
+            {!loading && customItems.length === 0 && (
+              <li className="p-6 text-sm text-gray-500">등록한 커스텀 질문이 없습니다.</li>
+            )}
             {customItems.map((q) => {
               const checked = selected.some((x) => x.questionId === q.questionId);
               return (
@@ -204,9 +246,6 @@ export default function QuestionListPage() {
                 </li>
               );
             })}
-            {customItems.length === 0 && (
-              <li className="p-6 text-sm text-gray-500">등록한 커스텀 질문이 없습니다.</li>
-            )}
           </ul>
         </div>
       </div>

@@ -24,5 +24,6 @@ export const API_PATHS = {
   AUTH: {
     REGISTER: '/user/register',
     LOGIN: '/user/login',
+    QUESTIONS: '/questions',
   },
 };
