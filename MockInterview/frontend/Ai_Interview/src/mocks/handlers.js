@@ -1,7 +1,27 @@
 // src/mocks/handlers.js
 import { http, HttpResponse } from "msw";
 
+/* -------------------- Seed Data -------------------- */
+const commonQs = [
+  { questionId: 1, text: "자기소개를 해주세요.", source: "COMMON" },
+  { questionId: 2, text: "우리 회사에 지원한 이유는 무엇인가요?", source: "COMMON" },
+  { questionId: 3, text: "최근에 해결한 어려운 문제 하나를 설명해주세요.", source: "COMMON" },
+];
+
+const resumeQs = [
+  { questionId: 11, text: "이력서의 프로젝트 A에서 맡은 역할은?", source: "RESUME" },
+  { questionId: 12, text: "프로젝트 B의 성과와 본인 기여를 설명해주세요.", source: "RESUME" },
+  { questionId: 13, text: "이 경험이 해당 직무에 어떻게 연결되나요?", source: "RESUME" },
+];
+
+let seq = 100; // 커스텀 질문 id 시퀀스
+let customQs = [
+  { questionId: ++seq, text: "입사 후 90일 동안 무엇을 하실 건가요?", source: "CUSTOM" },
+];
+
+/* -------------------- Handlers -------------------- */
 export const handlers = [
+  // 로그인
   http.post("/api/user/login", async ({ request }) => {
     const { id, pw } = await request.json();
     if (id === "test" && pw === "1234") {
@@ -10,17 +30,19 @@ export const handlers = [
     return HttpResponse.json({ message: "Unauthorized" }, { status: 401 });
   }),
 
-  // 필요하면 회원가입/ME도 추가
+  // 회원가입
   http.post("/api/user/register", async ({ request }) => {
     const { id, pw, name } = await request.json();
     return HttpResponse.json({ ok: true, user: { id, name } }, { status: 201 });
   }),
-  http.get("/api/users/me", ({ request }) => {
+
+  // 내 정보
+  http.get("/api/users/me", () => {
     return HttpResponse.json({ id: "test", name: "은혜", role: "user" });
   }),
 
-    // 감정 데이터
-  http.get("/api/sessions/:id/emotions", ({ params }) => {
+  // 감정 데이터
+  http.get("/api/sessions/:id/emotions", () => {
     return HttpResponse.json([
       { t: 0, valence: 0.1 },
       { t: 1, valence: -0.2 },
@@ -31,7 +53,7 @@ export const handlers = [
   }),
 
   // 자막 데이터
-  http.get("/api/sessions/:id/transcript", ({ params }) => {
+  http.get("/api/sessions/:id/transcript", () => {
     return HttpResponse.json([
       { start: 0.5, end: 2.2, text: "안녕하세요, 저는 김은혜입니다." },
       { start: 2.5, end: 5.0, text: "AI 면접 코치를 소개하겠습니다." },
@@ -39,10 +61,11 @@ export const handlers = [
     ]);
   }),
 
-    http.get("/api/questions", async (req) => {
-    const q = getQuery(req);
-    const source = q.get("source") || "COMMON"; // "COMMON" | "RESUME"
-    const limit = Number(q.get("limit") || 50);
+  // 질문 목록 (COMMON | RESUME)
+  http.get("/api/questions", ({ request }) => {
+    const url = new URL(request.url);
+    const source = (url.searchParams.get("source") || "COMMON").toUpperCase();
+    const limit = Number(url.searchParams.get("limit") || 50);
 
     let data = [];
     if (source === "COMMON") data = commonQs;
@@ -52,7 +75,7 @@ export const handlers = [
   }),
 
   // 커스텀 질문 목록
-  http.get("/api/custom-questions", async () => {
+  http.get("/api/custom-questions", () => {
     return HttpResponse.json(customQs, { status: 200 });
   }),
 
@@ -69,7 +92,7 @@ export const handlers = [
   }),
 
   // 커스텀 질문 삭제
-  http.delete("/api/custom-questions/:questionId", async ({ params }) => {
+  http.delete("/api/custom-questions/:questionId", ({ params }) => {
     const id = Number(params.questionId);
     const exists = customQs.some((q) => q.questionId === id);
     if (!exists) {
@@ -79,7 +102,7 @@ export const handlers = [
     return HttpResponse.json({ ok: true }, { status: 200 });
   }),
 
-  // 면접 세션 생성 (선택 질문 ID 배열을 받아 세션ID 발급)
+  // 면접 세션 생성
   http.post("/api/interviews", async ({ request }) => {
     const body = await request.json().catch(() => ({}));
     const questionIds = Array.isArray(body?.questionIds) ? body.questionIds : [];
@@ -89,6 +112,4 @@ export const handlers = [
     const sessionId = `sess_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
     return HttpResponse.json({ sessionId }, { status: 201 });
   }),
-
-  
 ];

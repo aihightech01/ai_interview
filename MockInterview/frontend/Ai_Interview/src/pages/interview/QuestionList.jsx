@@ -1,39 +1,14 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import Header from "../../components/Header";
 
 const TABS = [
   { key: "COMMON", label: "공통 면접 질문" },
   { key: "RESUME", label: "자소서 기반 질문" },
   { key: "CUSTOM", label: "커스텀 질문" },
 ];
-
-function Header() {
-  // 로그인 상태는 라우팅 전환 시 갱신되도록 storage 이벤트도 고려 가능하지만,
-  // 여기서는 간단히 렌더 시점 기준으로만.
-  const isLoggedIn = useMemo(() => !!localStorage.getItem("accessToken"), []);
-  return (
-    <header className="w-full h-14 border-b bg-white">
-      <div className="max-w-[1200px] mx-auto h-full flex items-center justify-between px-4">
-        <div className="text-sm font-semibold">AI 면접 코치</div>
-        <nav className="flex items-center gap-2">
-          {isLoggedIn && (
-            <Link to="/mypage" className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50">
-              마이페이지
-            </Link>
-          )}
-          <Link to="/login" className="px-3 py-1.5 rounded border text-sm hover:bg-gray-50">
-            로그인
-          </Link>
-          <Link to="/signup" className="px-3 py-1.5 rounded bg-[#3B82F6] text-white text-sm hover:opacity-90">
-            회원가입
-          </Link>
-        </nav>
-      </div>
-    </header>
-  );
-}
 
 function Footer() {
   return (
@@ -47,7 +22,7 @@ function Footer() {
 }
 
 export default function QuestionListPage() {
-  const nav = useNavigate();
+  const nav = useNavigate(); // ✅ 훅은 최상단에서만
 
   // 선택한 질문들
   const [selected, setSelected] = useState([]); // [{questionId,text,source}]
@@ -62,7 +37,7 @@ export default function QuestionListPage() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 탭 전환 시 데이터 로드 (MSW /api/* 경로 사용)
+  // 탭 전환 시 데이터 로드
   useEffect(() => {
     const ac = new AbortController();
     const run = async () => {
@@ -72,13 +47,28 @@ export default function QuestionListPage() {
           const { data } = await axiosInstance.get(API_PATHS.CUSTOM_QUESTIONS, {
             signal: ac.signal,
           });
-          setCustomItems(Array.isArray(data) ? data : []);
+          // 백엔드에서 id/content로 줄 수도 있으니 방어 매핑
+          const arr = Array.isArray(data) ? data : [];
+          setCustomItems(
+            arr.map((d) => ({
+              questionId: d.questionId ?? d.id ?? d.uuid ?? String(d?.id ?? ""),
+              text: d.text ?? d.content ?? "",
+              source: d.source ?? "CUSTOM",
+            }))
+          );
         } else {
           const { data } = await axiosInstance.get(
             `${API_PATHS.QUESTIONS}?source=${encodeURIComponent(tab)}&limit=50`,
             { signal: ac.signal }
           );
-          setItems(Array.isArray(data) ? data : []);
+          const arr = Array.isArray(data) ? data : [];
+          setItems(
+            arr.map((d) => ({
+              questionId: d.questionId ?? d.id ?? d.uuid ?? String(d?.id ?? ""),
+              text: d.text ?? d.content ?? "",
+              source: d.source ?? tab,
+            }))
+          );
         }
       } catch (e) {
         if (ac.signal.aborted) return;
@@ -111,7 +101,9 @@ export default function QuestionListPage() {
     try {
       const questionIds = selected.map((s) => s.questionId);
       const { data } = await axiosInstance.post(API_PATHS.INTERVIEWS, { questionIds });
-      nav("/interview/devices", { state: { sessionId: data.sessionId } });
+      const sessionId = data?.sessionId ?? data?.id ?? data?.session?.id;
+      if (!sessionId) throw new Error("No session id");
+      nav("/interview/devices", { state: { sessionId } });
     } catch (e) {
       console.warn("[QuestionList] start error:", e);
       alert("세션 생성에 실패했어요. 잠시 후 다시 시도해주세요.");
@@ -125,7 +117,12 @@ export default function QuestionListPage() {
     setBusy(true);
     try {
       const { data } = await axiosInstance.post(API_PATHS.CUSTOM_QUESTIONS, { text });
-      setCustomItems((prev) => [data, ...prev]);
+      const q = {
+        questionId: data?.questionId ?? data?.id ?? String(Date.now()),
+        text: data?.text ?? text,
+        source: "CUSTOM",
+      };
+      setCustomItems((prev) => [q, ...prev]);
       setDraft("");
     } catch (e) {
       console.warn("[QuestionList] add custom error:", e);
@@ -153,7 +150,7 @@ export default function QuestionListPage() {
   const slots = [0, 1, 2].map((i) => selected[i] ?? null);
 
   // 공통/자소서 리스트 패널
-  const ListPanel = (
+  const ListPanel =
     <section className="bg-white border rounded-xl shadow-sm">
       <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
       <div className="px-6 pb-6">
@@ -187,11 +184,10 @@ export default function QuestionListPage() {
           </ul>
         </div>
       </div>
-    </section>
-  );
+    </section>;
 
   // 커스텀 패널
-  const CustomPanel = (
+  const CustomPanel =
     <section className="bg-white border rounded-xl shadow-sm">
       <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
 
@@ -249,8 +245,7 @@ export default function QuestionListPage() {
           </ul>
         </div>
       </div>
-    </section>
-  );
+    </section>;
 
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC] flex flex-col">
