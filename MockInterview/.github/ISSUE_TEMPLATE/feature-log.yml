@@ -1,0 +1,51 @@
+name: "✨ Feature Work Log"
+description: "프로젝트에서 한 작업을 기록하는 템플릿"
+title: "[FE] 작업 제목을 입력하세요"
+labels: ["feature", "frontend"]
+
+body:
+  - type: input
+    id: date
+    attributes:
+      label: 🗓️ 작업 날짜
+      placeholder: "예: 2025-09-14"
+    validations:
+      required: true
+
+  - type: input
+    id: branch
+    attributes:
+      label: 🌱 브랜치명
+      placeholder: "예: feature/fe-닉네임/작업내용"
+
+  - type: textarea
+    id: actions
+    attributes:
+      label: 🛠️ 내가 한 행동
+      placeholder: "- 기능 브랜치 생성\n- 컴포넌트 추가"
+    validations:
+      required: true
+
+  - type: textarea
+    id: result
+    attributes:
+      label: ✅ 결과 / 성과
+      placeholder: "- 로컬 실행 성공"
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: ⚠️ 문제 / 이슈
+      placeholder: "- 브랜치 충돌"
+
+  - type: textarea
+    id: learning
+    attributes:
+      label: 💡 배운 점
+      placeholder: "- 브랜치 네이밍 규칙 중요"
+
+  - type: textarea
+    id: next
+    attributes:
+      label: 📍 다음 할 일
+      placeholder: "- PR 생성"
