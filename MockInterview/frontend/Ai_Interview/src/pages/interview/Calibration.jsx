@@ -1,6 +1,7 @@
 // src/pages/interview/Calibration.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Footer from "../../components/Footer";
 
 // ===== 설정 =====
 const NEXT_PATH = "/interview/run/:sessionId"; // 저장 후 이동할 경로
@@ -291,10 +292,7 @@ const Calibration = () => {
           </div>
         </div>
       </div>
-
-      <footer className="text-xs text-slate-400 py-10 text-center">
-        © 2025 AI 면접 코치. All rights reserved.
-      </footer>
+      <Footer />
     </div>
   );
 };
