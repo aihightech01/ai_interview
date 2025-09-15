@@ -16,7 +16,8 @@ import QuestionList from "./pages/interview/QuestionList";
 import DeviceTest from "./pages/interview/DeviceTest";
 import Interview from "./pages/interview/Interview";
 import Loading from "./pages/interview/Loading";
-import RecordPage from "./pages/interview/RecordPage";
+import Calibration from "./pages/interview/Calibration";
+
 
 
 
@@ -33,9 +34,9 @@ const App = () => {
               <Route path="/mypage" element={<MyPage />} />
 
               <Route path="/session/:id" element={<SessionDetail />} />
-              <Route path="/RecordPage" element={<RecordPage />} />
               <Route path="/dashboard" element={<Dashboard />} />
 
+              <Route path="interview/calibration" element={<Calibration />} />
               <Route path="/interview/select" element={<Select />} />
               <Route path="/interview/resume" element={<ResumeUpload />} />
               <Route path="/interview/questions" element={<QuestionList />} />

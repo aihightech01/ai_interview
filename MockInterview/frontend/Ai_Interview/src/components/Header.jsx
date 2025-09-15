@@ -1,6 +1,11 @@
 // src/components/Header.jsx
 import React from "react";
+
+// 현재 페이지 경로(pathname)와 페이지 이동 함수(navigate)를 가져오기 위해
+// react-router-dom의 useLocation, useNavigate 훅을 임포트합니다.
 import { useLocation, useNavigate } from "react-router-dom";
+
+// 로그인/인증 정보를 가져오기 위해 AuthContext에서 만든 커스텀 훅을 불러옵니다.
 import { useAuth } from "../context/AuthContext";
 
 const Header = () => {
