@@ -3,18 +3,10 @@ import React, { useRef, useState } from "react";
 import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { useNavigate } from "react-router-dom";
-import AppHeader from "../../components/Header";
+import Header from "../../components/Header";
+import Footer from "../../components/Footer";
 
-function Footer() {
-  return (
-    <footer className="w-full border-t">
-      <div className="max-w-[1200px] mx-auto px-4 py-8 text-xs text-gray-500 flex items-center justify-between">
-        <span>© 2025 AI 면접 코치. All rights reserved.</span>
-        <span>문의: support@example.com</span>
-      </div>
-    </footer>
-  );
-}
+
 
 export default function ResumeUploadPage() {
   const nav = useNavigate();
@@ -80,7 +72,7 @@ export default function ResumeUploadPage() {
 
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC] flex flex-col">
-      <AppHeader />
+      <Header />
 
       <main className="flex-1">
         <div className="max-w-[1200px] mx-auto px-4 py-10">
@@ -240,7 +232,7 @@ export default function ResumeUploadPage() {
         </div>
       </main>
 
-      <Footer />
+     <Footer />
     </div>
   );
 }

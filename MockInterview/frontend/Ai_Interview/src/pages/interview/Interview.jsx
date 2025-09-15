@@ -5,6 +5,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { formatSec } from "../../utils/helper";
+import Header from "../../components/Header";
+import Footer from "../../components/Footer";
 
 // 버튼 유틸(시안과 유사한 톤)
 const btn = (variant = "default") => {
@@ -156,6 +158,7 @@ export default function Interview() {
 
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC] flex flex-col">
+      <Header />
       {/* 상단 헤더 영역은 AppHeader가 있다면 그걸 사용하세요. 이 화면 내부 상단 바만 구성 */}
       <main className="flex-1">
         <div className="max-w-[1100px] mx-auto px-4 py-6">
@@ -244,12 +247,7 @@ export default function Interview() {
         </div>
       </main>
 
-      <footer className="w-full border-t">
-        <div className="max-w-[1100px] mx-auto px-4 py-8 text-xs text-gray-500 flex items-center justify-between">
-          <span>© 2025 AI 면접 코치. All rights reserved.</span>
-          <span>문의: support@example.com</span>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

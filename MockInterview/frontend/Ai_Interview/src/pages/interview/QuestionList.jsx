@@ -3,6 +3,7 @@ import axiosInstance from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
+import Footer from "../../components/Footer";
 
 const TABS = [
   { key: "COMMON", label: "공통 면접 질문" },
@@ -10,16 +11,7 @@ const TABS = [
   { key: "CUSTOM", label: "커스텀 질문" },
 ];
 
-function Footer() {
-  return (
-    <footer className="w-full border-t">
-      <div className="max-w-[1200px] mx-auto px-4 py-8 text-xs text-gray-500 flex items-center justify-between">
-        <span>© 2025 AI 면접 코치. All rights reserved.</span>
-        <span>문의: support@example.com</span>
-      </div>
-    </footer>
-  );
-}
+
 
 export default function QuestionListPage() {
   const nav = useNavigate(); // ✅ 훅은 최상단에서만
@@ -301,7 +293,7 @@ export default function QuestionListPage() {
         </div>
       </main>
 
-      <Footer />
+     <Footer/>
     </div>
   );
 }

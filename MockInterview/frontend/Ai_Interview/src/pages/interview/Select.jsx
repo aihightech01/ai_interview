@@ -1,7 +1,8 @@
 // src/pages/interview/Select.jsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import AppHeader from "../../components/Header"; // ✅ 헤더 컴포넌트 가져오기 (경로는 프로젝트 구조에 맞게)
+import Header from "../../components/Header"; // ✅ 헤더 컴포넌트 가져오기 (경로는 프로젝트 구조에 맞게)
+import Footer from "../../components/Footer";
 
 export default function Select() {
   const nav = useNavigate();
@@ -9,7 +10,7 @@ export default function Select() {
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC]">
       {/* ✅ 재귀 방지: 로컬 Header 함수 삭제하고, 가져온 Header 사용 */}
-      <AppHeader />
+      <Header />
 
       <main className="max-w-[1200px] mx-auto px-4 py-8">
         <div className="grid md:grid-cols-2 gap-8">
@@ -64,6 +65,7 @@ export default function Select() {
           </section>
         </div>
       </main>
+     <Footer/>
     </div>
   );
 }
