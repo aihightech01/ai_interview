@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 // ===== 설정 =====
-const NEXT_PATH = "/interview/record"; // 저장 후 이동할 경로
+const NEXT_PATH = "/interview/run/:sessionId"; // 저장 후 이동할 경로
 const CALIB_OVERLAY_DELAY_MS = 3000;   // 캘리브레이션 후 오버레이까지 대기
 const RECORD_DURATION_MS = 3000;       // 저장할 영상 길이
 

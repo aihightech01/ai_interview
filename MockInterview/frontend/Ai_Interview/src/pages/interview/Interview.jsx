@@ -26,10 +26,14 @@ export default function Interview() {
   const { sessionId: routeId } = useParams();
   const nav = useNavigate();
 
-  // 안전 값: 질문 리스트가 없더라도 최소 1문항 UI 유지
+  // 기본 3문항
   const questions = Array.isArray(selected) && selected.length > 0
     ? selected
-    : [{ questionId: 0, text: "샘플 질문입니다. 최근 해결했던 어려운 문제와 해결 과정을 설명해 주세요." }];
+    : [
+        { questionId: 1, text: "최근 해결했던 어려운 문제와 해결 과정을 설명해 주세요." },
+        { questionId: 2, text: "팀 프로젝트에서 맡았던 역할과 성과를 구체적으로 말해 주세요." },
+        { questionId: 3, text: "실패 경험 하나와, 그 경험에서 배운 점을 알려 주세요." },
+      ];
   const total = questions.length;
   const q = questions[Math.min(currentIdx ?? 0, total - 1)];
   const sid = session?.sessionId || routeId || "mock-session";
@@ -40,6 +44,7 @@ export default function Interview() {
 
   const mediaRef = useRef(null);
   const recorderRef = useRef(null);
+  const skipSaveRef = useRef(false);
 
   // 타이머 (최대 60초)
   useEffect(() => {
@@ -67,7 +72,12 @@ export default function Interview() {
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-    recorder.onstop = () => setBlob(new Blob(chunks, { type: "video/webm" }));
+    recorder.onstop = () => {
+      if (!skipSaveRef.current) {
+        setBlob(new Blob(chunks, { type: "video/webm" }));
+      }
+      skipSaveRef.current = false; // 다음 녹화를 위해 초기화
+    };
     recorderRef.current = recorder;
     recorder.start();
     setSec(0);
@@ -111,15 +121,38 @@ export default function Interview() {
       setIdx(next);
     } else {
       // 마지막 문항 이후에만 분석(로딩) 페이지로
-      nav(`/interview/loading/${sid}`);
+      nav("/mypage");
     }
   }
 
   // 재촬영: 현재 문항에서 녹화물/타이머만 초기화
   function resetTake() {
+    // ✅ onstop에서 blob 저장하지 않도록 플래그 세팅
+    if (recorderRef.current && rec) {
+      skipSaveRef.current = true;
+      recorderRef.current.stop();
+    }
+
+    // ✅ 스트림 트랙 정지
+    const stream = mediaRef.current?.srcObject;
+    if (stream && typeof stream.getTracks === "function") {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+
+    // ✅ 비디오 요소 초기화 (처음 상태로)
+    if (mediaRef.current) {
+      mediaRef.current.pause?.();
+      mediaRef.current.srcObject = null;
+      mediaRef.current.removeAttribute?.("src"); // 안전하게 초기화
+      mediaRef.current.load?.();
+    }
+
+    // ✅ 상태 초기화 → 시작 버튼 보이는 상태
+    setRec(false);
     setBlob(null);
     setSec(0);
   }
+
 
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC] flex flex-col">
