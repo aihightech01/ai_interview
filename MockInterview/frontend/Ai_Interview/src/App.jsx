@@ -36,7 +36,7 @@ const App = () => {
               <Route path="/session/:id" element={<SessionDetail />} />
               <Route path="/dashboard" element={<Dashboard />} />
 
-              <Route path="interview/calibration" element={<Calibration />} />
+              <Route path="/interview/calibration" element={<Calibration />} />
               <Route path="/interview/select" element={<Select />} />
               <Route path="/interview/resume" element={<ResumeUpload />} />
               <Route path="/interview/questions" element={<QuestionList />} />
