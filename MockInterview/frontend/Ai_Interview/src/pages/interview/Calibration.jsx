@@ -73,7 +73,7 @@ const Calibration = () => {
     if (!v) return;
     if (v.srcObject !== stream) v.srcObject = stream;
     v.muted = true;
-    v.play?.().catch(() => {});
+    v.play?.().catch(() => { });
   }, [stream]);
 
   // 파일 저장
@@ -199,13 +199,12 @@ const Calibration = () => {
                 <button
                   onClick={onCalibrationStart}
                   disabled={calibCooling}
-                  className={`h-9 px-3 rounded ${
-                    calibCooling ? "bg-slate-200 text-slate-500" : "bg-blue-600 text-white"
-                  }`}
+                  className={`h-9 px-3 rounded ${calibCooling ? "bg-slate-200 text-slate-500" : "bg-blue-600 text-white"
+                    }`}
                 >
                   {calibStarted
-                    ? (calibCooling ? `준비중... ${cooldownLeft}s` : "Re-Calibrate")
-                    : "Start Calibration"}
+                    ? (calibCooling ? `준비중... ${cooldownLeft}s` : "테스트 재시작")
+                    : "테스트 시작"}
                 </button>
               </div>
 
@@ -215,14 +214,16 @@ const Calibration = () => {
                 </div>
 
                 {/* ✅ 중앙 프레이밍 가이드 — 오버레이가 없을 때만 표시 */}
+                {/* ✅ 중앙 프레이밍 가이드 — 오버레이가 없을 때만 표시 */}
                 {!showOverlay && (
                   <div className="pointer-events-none absolute inset-0 grid place-items-center z-20">
                     <div className="relative w-[260px] h-[260px] rounded-full border-2 border-white/70">
-                      <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[2px] bg-white/60" />
+                      {/* 안내 문구 */}
                       <div className="absolute inset-0 flex items-center justify-center text-center px-4">
-                        <span className="text-white text-sm font-medium leading-snug drop-shadow">
-                          얼굴을 화면 중앙에{"\n"}맞춰주세요
-                        </span>
+                        <p className="text-white text-sm font-medium leading-relaxed drop-shadow">
+                          얼굴을 화면 중앙에<br />
+                          맞춰주세요
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -233,7 +234,6 @@ const Calibration = () => {
                   <div className="absolute inset-0 bg-black/65 grid place-items-center rounded-xl z-30">
                     <div className="text-center text-white">
                       <p className="text-lg font-semibold mb-1">면접 시작 버튼을 눌러주세요</p>
-                      <p className="text-sm opacity-80">체크리스트를 확인한 후 진행하세요</p>
                     </div>
                   </div>
                 )}
@@ -249,28 +249,7 @@ const Calibration = () => {
             </div>
           </div>
 
-          {/* 오른쪽: 체크리스트 & 면접 시작 */}
           <div className="col-span-12 lg:col-span-4 space-y-6">
-            <div className="rounded-xl border bg-white p-6">
-              <h3 className="font-semibold mb-4">체크리스트</h3>
-              <div className="space-y-3 text-sm">
-                {CHECKS.map((c) => (
-                  <label key={c.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      name={c.id}
-                      checked={checks[c.id]}
-                      onChange={(e) =>
-                        setChecks((prev) => ({ ...prev, [c.id]: e.target.checked }))
-                      }
-                      className="h-4 w-4"
-                    />
-                    <span>{c.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
             <div className="rounded-xl border bg-white p-6">
               <div className="text-xs text-slate-500 mb-3">완료 준비</div>
               <p className="text-sm text-slate-600 mb-4">
@@ -279,11 +258,10 @@ const Calibration = () => {
               <button
                 onClick={onClickStartInterview}
                 disabled={calibCooling || !calibStarted || isRecording}
-                className={`h-10 px-4 rounded-lg w-full ${
-                  !calibCooling && calibStarted && !isRecording
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                }`}
+                className={`h-10 px-4 rounded-lg w-full ${!calibCooling && calibStarted && !isRecording
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                  }`}
               >
                 {isRecording ? "저장 중..." : "면접 시작"}
               </button>
@@ -292,9 +270,6 @@ const Calibration = () => {
         </div>
       </div>
 
-      <footer className="text-xs text-slate-400 py-10 text-center">
-        © 2025 AI 면접 코치. All rights reserved.
-      </footer>
     </div>
   );
 };
