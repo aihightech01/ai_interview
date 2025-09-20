@@ -16,14 +16,18 @@ public class ResumeController {
 
     private final ResumeService resumeService;
 
-    @PostMapping("/upload")
-    public ResponseEntity<String> uploadResume(@ModelAttribute ResumeUploadRequestDto requestDto) throws TikaException, IOException {
-        // 서비스의 올바른 메서드 이름을 호출합니다.
-        resumeService.saveResumeWithTextAndFile(
+    @PostMapping("/upload/{interviewId}")
+    public ResponseEntity<String> uploadResume(
+            @PathVariable Long interviewId,
+            @ModelAttribute ResumeUploadRequestDto requestDto) throws TikaException, IOException {
+
+        resumeService.saveResumeAndGenerateQuestions(
+                interviewId,
                 requestDto.getUserId(),
+                requestDto.getInterviewTitle(), // 서비스에 interviewTitle 전달
                 requestDto.getTextContent(),
                 requestDto.getResumeFile()
         );
-        return ResponseEntity.ok("Resume uploaded successfully.");
+        return ResponseEntity.ok("Resume uploaded and questions generated successfully.");
     }
 }

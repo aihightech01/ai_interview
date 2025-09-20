@@ -1,6 +1,6 @@
 package com.example.interviewaiserver.dto;
 
-import com.example.interviewaiserver.entity.Question;
+import com.example.interviewaiserver.domain.QuestionEntity;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -21,26 +21,12 @@ public class QuestionResponseDto {
         this.questionContent = questionContent;
     }
 
-    // Entity -> DTO 변환 메서드
-    public static QuestionResponseDto fromEntity(Question question) {
-        String questionPrefix = "";
-        switch (question.getQuestionType()) {
-            case COMMON:
-                questionPrefix = "q_c_";
-                break;
-            case RESUME:
-                questionPrefix = "q_r_";
-                break;
-            case CUSTOM:
-                questionPrefix = "q_u_"; // User custom
-                break;
-        }
-
+    public static QuestionResponseDto fromEntity(QuestionEntity question) {
         return QuestionResponseDto.builder()
-                .questionNO("q_" + question.getId()) // 접두사 로직은 예시로 단순화
-                .interviewNO(question.getInterviewSession() != null ? question.getInterviewSession().getId() : null)
-                .userID(question.getUser() != null ? question.getUser().getId() : null) // 이제 String을 반환하므로 타입 일치
-                .questionType(question.getQuestionType().name())
+                .questionNO("q_" + question.getQuesionNO())
+                .interviewNO(question.getInterview() != null ? question.getInterview().getInterviewNO() : null)
+                .userID(question.getId() != null ? question.getId().getId() : null)
+                .questionType(question.getQuestionType())
                 .questionContent(question.getContent())
                 .build();
     }

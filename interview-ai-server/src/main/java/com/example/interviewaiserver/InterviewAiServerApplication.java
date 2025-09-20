@@ -15,12 +15,5 @@ public class InterviewAiServerApplication {
         SpringApplication.run(InterviewAiServerApplication.class, args);
     }
 
-    @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        // 구식 메서드 대신 customizer를 사용하는 최신 방식으로 변경
-        return builder
-            .setConnectTimeout(Duration.ofSeconds(30))
-            .setReadTimeout(Duration.ofSeconds(90))
-            .build();
-    }
+
 }
