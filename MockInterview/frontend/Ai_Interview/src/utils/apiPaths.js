@@ -29,5 +29,11 @@ export const API_PATHS = {
   AUTH: {
     REGISTER: "/user/register",
     LOGIN: "/user/login",
+    PROFILE: "/user/profile",
   },
+
+    VIDEOS: {
+    STREAM: (videoNo) => `/videos/stream/${videoNo}`, // 비디오 스트림/상세
+  },
+
 };

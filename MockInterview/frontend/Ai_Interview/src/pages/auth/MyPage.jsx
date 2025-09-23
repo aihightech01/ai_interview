@@ -1,62 +1,37 @@
-// src/pages/Auth/MyPage.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../../components/Modal";
 import { useAuth } from "../../context/AuthContext";
-
-// --- 더미 카드 데이터 ---
-const MOCK_RESULTS = [
-  { id: 1, title: "자기소개 장점 (강점)은 무엇입니까?", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "analyzing", tone: "dark" },
-  { id: 2, title: "프로젝트에서 맡은 역할은?", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "blue" },
-  { id: 3, title: "리더십을 발휘한 경험", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "blue" },
-  { id: 4, title: "갈등 상황 해결 사례", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "blue" },
-  { id: 5, title: "자기소개 장점 (강점)은 무엇입니까?", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "none" },
-  { id: 6, title: "자기소개 장점 (강점)은 무엇입니까?", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "none" },
-  { id: 7, title: "자기소개 장점 (강점)은 무엇입니까?", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "pink" },
-  { id: 8, title: "자기소개 장점 (강점)은 무엇입니까?", date: "2024.02.27 15:58", kind: "실전 면접", duration: "00:33", status: "done", tone: "pink" },
-];
-
-const toneClass = (tone) => {
-  switch (tone) {
-    case "dark": return "bg-[#0E1320] text-white";
-    case "blue": return "bg-[#EAF1FF]";
-    case "pink": return "bg-[#FFE9EB]";
-    default: return "bg-[#EEF2F7]";
-  }
-};
+import api from "../../utils/axiosInstance"; // ✅ 방금 만든 axios 인스턴스
 
 const STORAGE_KEY = "ai-coach-profile";
 
 const MyPage = () => {
   const { user, isAuth, logout } = useAuth();
+  const navigate = useNavigate();
+
   const [tab, setTab] = useState("실전 면접");
+  const [profile, setProfile] = useState({ name: "", email: "" });
 
-  // 화면에 보여줄 프로필
-  const [profile, setProfile] = useState({
-    name: "",
-    email: "",
-  });
+  // 서버에서 받아온 인터뷰 리스트
+  const [interviews, setInterviews] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
-  // 수정 모달
+  // 수정 모달 상태
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editProfile, setEditProfile] = useState(profile);
-
-  // 비밀번호 변경
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwNew2, setPwNew2] = useState("");
   const [formError, setFormError] = useState("");
 
-  const navigate = useNavigate();
-
-  // 인증되지 않은 경우 로그인 페이지로
+  // 미로그인 가드
   useEffect(() => {
-    if (!isAuth) {
-      navigate("/login");
-    }
+    if (!isAuth) navigate("/login");
   }, [isAuth, navigate]);
 
-  // 로그인 유저 + 로컬 저장값 병합
+  // 로그인 유저 + 로컬 저장값 병합 (좌측 카드)
   useEffect(() => {
     const base = {
       name: user?.name || user?.loginId || "",
@@ -67,14 +42,59 @@ const MyPage = () => {
       try {
         const parsed = JSON.parse(saved);
         setProfile({ ...base, ...parsed });
-      } catch (e) {
-        console.warn("profile parse error", e);
+      } catch {
         setProfile(base);
       }
     } else {
       setProfile(base);
     }
   }, [user]);
+
+  // ✅ 백엔드 연동: /api/user/profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      setLoading(true);
+      setErr("");
+      try {
+        const { data } = await api.get("/user/profile");
+        // data: { name, email, interviews: [...] }
+        // 좌측 프로필은 서버 값이 있으면 갱신(사용자 수정값은 그대로 두고 싶으면 이 줄을 주석)
+        setProfile((prev) => ({
+          ...prev,
+          name: data.name || prev.name,
+          email: data.email || prev.email,
+        }));
+
+        // 인터뷰 리스트 매핑 (테이블 렌더링용)
+        const mapped = (data.interviews || []).map((it) => ({
+          id: it.interview_no,
+          title: it.interview_title,
+          count: it.question_count,
+          date: formatKST(it.interview_date),
+          kind: it.interview_type,              // "실전 면접" | "모의 면접"
+          statusText: it.analysis_status,       // "현재 분석 중" | "분석 완료"
+          statusTone: it.analysis_status?.includes("중") ? "blue" : "green",
+        }));
+        setInterviews(mapped);
+      } catch (e) {
+        console.error(e);
+        if (e?.response?.status === 401) {
+          // 토큰 만료 등: 로그인으로 보내기
+          navigate("/login");
+        } else {
+          setErr("프로필 정보를 불러오지 못했습니다.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [navigate]);
+
+  const filtered = useMemo(
+    () => interviews.filter((r) => r.kind === tab),
+    [interviews, tab]
+  );
 
   const openEdit = () => {
     setEditProfile(profile);
@@ -88,7 +108,6 @@ const MyPage = () => {
   const handleSaveProfile = (e) => {
     e.preventDefault();
     setFormError("");
-
     if (!editProfile.name?.trim()) return setFormError("이름을 입력해 주세요.");
     if (!/^\S+@\S+\.\S+$/.test(editProfile.email || "")) return setFormError("올바른 이메일 주소를 입력해 주세요.");
 
@@ -120,16 +139,10 @@ const MyPage = () => {
             AI 면접 코치
           </button>
           <nav className="flex items-center gap-2">
-            <button
-              onClick={() => navigate("/")}
-              className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100"
-            >
+            <button onClick={() => navigate("/")} className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100">
               Home
             </button>
-            <button
-              onClick={handleLogout}
-              className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100"
-            >
+            <button onClick={handleLogout} className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100">
               로그아웃
             </button>
           </nav>
@@ -149,16 +162,13 @@ const MyPage = () => {
                   <p className="font-medium text-gray-900">{profile.name} 님</p>
                   <p className="text-xs text-gray-500">{profile.email}</p>
                 </div>
-                <button
-                  className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 hover:bg-gray-50"
-                  onClick={openEdit}
-                >
+                <button className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 hover:bg-gray-50" onClick={openEdit}>
                   수정
                 </button>
               </div>
             </section>
 
-            {/* 최근 분석 요약 */}
+            {/* 최근 분석 요약(임시 고정 문구) */}
             <section className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-medium text-gray-700">가장 최근 분석 요약</h3>
               <p className="mt-2 text-sm leading-relaxed text-gray-600">
@@ -172,9 +182,10 @@ const MyPage = () => {
             <div className="flex items-end justify-between">
               <div>
                 <h3 className="text-sm font-medium text-gray-700">
-                  실전 면접 분석 결과 <span className="text-blue-600">12</span>
+                  실전 면접 분석 결과 <span className="text-blue-600">{filtered.length}</span>
                 </h3>
-                <p className="text-[11px] text-gray-400 mt-1">2024.2.27</p>
+                {/* 서버에서 날짜가 필요하면 따로 추가 */}
+                <p className="text-[11px] text-gray-400 mt-1">2025.08.23</p>
               </div>
 
               <div className="flex items-center gap-2 text-sm">
@@ -183,9 +194,7 @@ const MyPage = () => {
                     key={name}
                     onClick={() => setTab(name)}
                     className={`px-3 py-1.5 rounded-lg border text-sm ${
-                      tab === name
-                        ? "border-blue-200 bg-blue-50 text-blue-700"
-                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                      tab === name ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                     }`}
                   >
                     {name}
@@ -194,36 +203,47 @@ const MyPage = () => {
               </div>
             </div>
 
-            {/* 카드 그리드 */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {MOCK_RESULTS.map((item) => (
-                <article
-                  key={item.id}
-                  className="cursor-pointer rounded-2xl border border-gray-200 overflow-hidden bg-white hover:shadow"
-                  onClick={() => navigate(`/session/${item.id}`, { state: { session: item } })}
-                  aria-label={`${item.title} 상세 보기`}
-                >
-                  <div className={`relative h-36 ${toneClass(item.tone)}`}>
-                    {item.status === "analyzing" && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
-                        <span className="text-[13px] opacity-90">현재 분석 중</span>
-                        <span className="text-[11px] opacity-60">5분 이내 완료됩니다.</span>
-                      </div>
-                    )}
-                    <span className="absolute left-2 top-2 text-[11px] rounded-md bg-white/80 border border-white px-2 py-0.5 text-gray-600">
-                      {item.kind}
-                    </span>
-                    <span className="absolute right-2 bottom-2 text-[11px] rounded-full bg-black/80 text-white px-2 py-0.5">
-                      {item.duration}
-                    </span>
-                  </div>
-                  <div className="p-3">
-                    <p className="text-[11px] text-blue-600">실전 면접</p>
-                    <p className="mt-1 text-sm font-medium text-gray-900 line-clamp-2">Q. {item.title}</p>
-                    <p className="mt-1 text-[11px] text-gray-500">{item.date}</p>
-                  </div>
-                </article>
-              ))}
+            {/* 테이블 */}
+            <div className="mt-4 rounded-2xl border border-gray-200 overflow-hidden">
+              {loading ? (
+                <div className="py-16 text-center text-sm text-gray-500">불러오는 중…</div>
+              ) : err ? (
+                <div className="py-16 text-center text-sm text-red-500">{err}</div>
+              ) : filtered.length === 0 ? (
+                <div className="py-16 text-center text-sm text-gray-500">표시할 항목이 없습니다.</div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-500">
+                    <tr>
+                      <Th>면접 제목</Th>
+                      <Th className="w-24 text-center">질문 개수</Th>
+                      <Th className="w-28 text-center">분석 상태</Th>
+                      <Th className="w-24 text-center">면접 종류</Th>
+                      <Th className="w-40 text-right pr-6">면접 날짜</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
+                      >
+                        <Td>
+                          <span className="text-blue-600 text-[11px] mr-2">{item.kind}</span>
+                          <span className="font-medium text-gray-900">Q. {item.title}</span>
+                        </Td>
+                        <Td className="text-center">{item.count}</Td>
+                        <Td className="text-center">
+                          <Badge tone={item.statusTone}>{item.statusText}</Badge>
+                        </Td>
+                        <Td className="text-center">{item.kind}</Td>
+                        <Td className="text-right pr-6 text-gray-600">{item.date}</Td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </section>
         </div>
@@ -232,7 +252,6 @@ const MyPage = () => {
       {/* ===== 프로필 편집 + 비밀번호 변경 모달 ===== */}
       <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="프로필 수정">
         <form onSubmit={handleSaveProfile} className="p-5 space-y-5">
-          {/* 프로필 수정 */}
           <div className="space-y-4">
             <div>
               <label className="block text-sm text-gray-700 mb-1">이름</label>
@@ -243,7 +262,6 @@ const MyPage = () => {
                 placeholder="이름을 입력하세요"
               />
             </div>
-
             <div>
               <label className="block text-sm text-gray-700 mb-1">이메일</label>
               <input
@@ -258,7 +276,6 @@ const MyPage = () => {
 
           <hr className="border-gray-200" />
 
-          {/* 비밀번호 변경 (선택) */}
           <div className="space-y-3">
             <p className="text-sm font-medium text-gray-800">비밀번호 변경 (선택)</p>
             <p className="text-xs text-gray-500">변경하지 않으려면 아래 입력란을 비워 두세요.</p>
@@ -304,17 +321,10 @@ const MyPage = () => {
           {formError && <p className="text-sm text-red-500">{formError}</p>}
 
           <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsEditOpen(false)}
-              className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm"
-            >
+            <button type="button" onClick={() => setIsEditOpen(false)} className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm">
               취소
             </button>
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
-            >
+            <button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
               저장
             </button>
           </div>
@@ -325,3 +335,36 @@ const MyPage = () => {
 };
 
 export default MyPage;
+
+/* ───── 테이블 유틸 ───── */
+function Th({ children, className = "" }) {
+  return <th className={`py-3 pl-4 pr-2 text-left font-medium ${className}`}>{children}</th>;
+}
+function Td({ children, className = "" }) {
+  return <td className={`py-3 pl-4 pr-2 align-middle ${className}`}>{children}</td>;
+}
+function Badge({ children, tone = "gray" }) {
+  const map = {
+    blue: "bg-blue-50 text-blue-700",
+    green: "bg-emerald-50 text-emerald-700",
+    gray: "bg-gray-100 text-gray-700",
+  };
+  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${map[tone]}`}>{children}</span>;
+}
+
+/* ───── 날짜 헬퍼(KST 표기) ───── */
+function formatKST(isoLike) {
+  try {
+    const d = new Date(isoLike);
+    // 한국 시간대 보정
+    const y = d.getFullYear();
+    const m = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mm = pad(d.getMinutes());
+    return `${y}.${m}.${day} ${hh}:${mm}`;
+  } catch {
+    return isoLike ?? "";
+  }
+}
+function pad(n) { return String(n).padStart(2, "0"); }

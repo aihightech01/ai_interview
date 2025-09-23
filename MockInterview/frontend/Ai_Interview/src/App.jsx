@@ -6,6 +6,7 @@ import MyPage from "./pages/auth/MyPage";
 import SignUp from "./pages/auth/SignUp";
 import LandingPage from "./pages/LandingPage";
 import SessionDetail from "./pages/Reports/SessionDetail";
+import SessionPreview from "./pages/Reports/SessionPreview";
 import Dashboard from "./pages/Dashboard";
 import { AuthProvider } from "./context/AuthContext";
 
@@ -17,6 +18,7 @@ import DeviceTest from "./pages/interview/DeviceTest";
 import Interview from "./pages/interview/Interview";
 import Loading from "./pages/interview/Loading";
 import Calibration from "./pages/interview/Calibration";
+import ProfileClipsPage from "./pages/Debug/ProfileClipsPage"; //✅ 임시 새 페이지
 
 
 
@@ -33,7 +35,8 @@ const App = () => {
               <Route path="/signup" element={<SignUp />} />
               <Route path="/mypage" element={<MyPage />} />
 
-              <Route path="/session/:id" element={<SessionDetail />} />
+              <Route path="/session/:sessionId/preview" element={<SessionPreview />} />
+              <Route path="/sessionDetail" element={<SessionDetail />} />
               <Route path="/dashboard" element={<Dashboard />} />
 
               <Route path="/interview/calibration" element={<Calibration />} />
@@ -43,6 +46,7 @@ const App = () => {
               <Route path="/interview/devices" element={<DeviceTest />} />
               <Route path="/interview/run/:sessionId?" element={<Interview />} />
               <Route path="/interview/loading/:sessionId" element={<Loading />} />
+                <Route path="/debug/profile/:interviewNo" element={<ProfileClipsPage />} />
             </Routes>
           </InterviewProvider>
         </Router>
