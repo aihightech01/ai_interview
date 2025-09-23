@@ -1,5 +1,5 @@
 // src/pages/Reports/SessionDetail.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState,  } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
@@ -123,7 +123,7 @@ useEffect(() => {
       const { data } = await api.get(url);
 
       if (!ignore) {
-        setClip(prev => ({ ...(prev || {}), ...(data || {}) })); // ✅ 항상 병합
+        setClip(prev => ({ ...(prev || {}), ...(data || {}) })); 
       }
     } catch (e) {
       if (!ignore) setErr("분석 데이터를 불러오지 못했습니다.");
