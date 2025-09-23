@@ -39,8 +39,8 @@ export const API_PATHS = {
     PROFILE_DETAIL: (sessionId, videoNo) => `/user/profile/${sessionId}/${videoNo}`,
   },
 
-    VIDEOS: {
-    STREAM: (videoNo) => `/videos/stream/${videoNo}`, // 비디오 스트림/상세
+  VIDEOS: {
+    STREAM: (videoNo) => `/videos/stream/${videoNo}`, // ✅ 상대 경로만
   },
 
 };
