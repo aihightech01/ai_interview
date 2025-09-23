@@ -1,7 +1,7 @@
 ---
 name: Feature request
 about: Feature 작업 상황을 입력해주세요.
-title: "[FE]_Feat"
+title: "[BE/FE]_Feat"
 labels: ''
 assignees: eeeunhey
 
