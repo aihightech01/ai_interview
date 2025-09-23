@@ -1,11 +1,12 @@
 // src/pages/Reports/SessionPreview.jsx
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom"; // ✅ useNavigate 추가
 import api from "../../utils/axiosInstance";
 
 export default function SessionPreview() {
   const { sessionId } = useParams(); // URL의 :sessionId
-  const [clips, setClips] = useState([]); // [{questionNo, videoNo, content, ...}]
+  const nav = useNavigate();          // ✅ 라우터 이동 훅
+  const [clips, setClips] = useState([]); // [{questionNo, videoNo, ...}]
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -17,10 +18,10 @@ export default function SessionPreview() {
         setLoading(true);
         setErr("");
 
-        // GET /user/profile/:sessionId  (GET에 Content-Type 헤더 불필요)
+        // GET /user/profile/:sessionId
         const { data } = await api.get(`/user/profile/${sessionId}`);
 
-        // data 형태 방어: 배열이면 그대로, 객체면 .clips 사용
+        // data 형태 방어
         const list = Array.isArray(data)
           ? data
           : Array.isArray(data?.clips)
@@ -43,13 +44,11 @@ export default function SessionPreview() {
   // 파일 경로가 D:\... 이면 직접 표시 불가 → 서버에서 URL 내려줄 때 사용
   const toFileUrl = (p) => p;
 
-  // ✅ 카드 클릭 시 API로 바로 이동 (예: /api/user/profile/6/52)
+  // ✅ 카드 클릭 시 UI 라우트로 이동 (/session/:sessionId/:videoNo)
   const goDetail = (clip) => {
     if (!clip?.videoNo) return;
-    // 같은 탭에서 이동
-    window.location.assign(`/api/user/profile/${sessionId}/${clip.videoNo}`);
-    // 새 탭에서 열고 싶다면 아래 사용:
-    // window.open(`/api/user/profile/${sessionId}/${clip.videoNo}`, "_blank");
+    // 상세 페이지로 이동 + clip을 state로 넘겨 재요청 없이 렌더 가능
+    nav(`/session/${sessionId}/${clip.videoNo}`, { state: { clip } });
   };
 
   return (
@@ -96,7 +95,7 @@ export default function SessionPreview() {
                     onClick={() => goDetail(c)}
                     disabled={!c.videoNo}
                     className={`rounded-2xl border border-gray-200 shadow-sm overflow-hidden bg-white hover:shadow-md transition text-left
-                                ${!c.videoNo ? "opacity-50 cursor-not-allowed" : ""}`}
+                      ${!c.videoNo ? "opacity-50 cursor-not-allowed" : ""}`}
                     title={c.videoNo ? "" : "videoNo가 없어 이동할 수 없습니다"}
                   >
                     <div className="h-32 bg-blue-50">
@@ -111,7 +110,9 @@ export default function SessionPreview() {
                     </div>
                     <div className="p-4">
                       <p className="text-xs text-gray-400 mb-1">Q{c.questionNo}</p>
-                      <p className="text-sm font-medium text-gray-900">{c.content}</p>
+                      <p className="text-sm font-medium text-gray-900">
+                        {c.questionContent ?? c.content}
+                      </p>
                     </div>
                   </button>
                 ))}

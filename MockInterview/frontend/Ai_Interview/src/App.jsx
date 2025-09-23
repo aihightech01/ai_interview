@@ -36,7 +36,7 @@ const App = () => {
               <Route path="/mypage" element={<MyPage />} />
 
               <Route path="/session/:sessionId/preview" element={<SessionPreview />} />
-              <Route path="/sessionDetail" element={<SessionDetail />} />
+              <Route path="/session/:sessionId/:videoNo" element={<SessionDetail />} />
               <Route path="/dashboard" element={<Dashboard />} />
 
               <Route path="/interview/calibration" element={<Calibration />} />
@@ -46,7 +46,8 @@ const App = () => {
               <Route path="/interview/devices" element={<DeviceTest />} />
               <Route path="/interview/run/:sessionId?" element={<Interview />} />
               <Route path="/interview/loading/:sessionId" element={<Loading />} />
-                <Route path="/debug/profile/:interviewNo" element={<ProfileClipsPage />} />
+              <Route path="/debug/profile/:interviewNo" element={<ProfileClipsPage />} />
+              <Route path="/session/:sessionId/:videoNo" element={<SessionDetail />} />
             </Routes>
           </InterviewProvider>
         </Router>

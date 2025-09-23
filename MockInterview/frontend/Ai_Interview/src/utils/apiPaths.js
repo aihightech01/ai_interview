@@ -32,6 +32,13 @@ export const API_PATHS = {
     PROFILE: "/user/profile",
   },
 
+    USER: {
+    // 세션의 질문/클립 목록
+    PROFILE_LIST: (sessionId) => `/user/profile/${sessionId}`,
+    // 특정 비디오(문항) 상세
+    PROFILE_DETAIL: (sessionId, videoNo) => `/user/profile/${sessionId}/${videoNo}`,
+  },
+
     VIDEOS: {
     STREAM: (videoNo) => `/videos/stream/${videoNo}`, // 비디오 스트림/상세
   },
