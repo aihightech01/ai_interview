@@ -1,7 +1,6 @@
 // src/pages/resume/ResumeUploadPage.jsx
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios"; // 👈 업로드 전용 인스턴스용
-import axiosInstance from "../../utils/axiosInstance"; // 기존 인스턴스(목/공통)
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
