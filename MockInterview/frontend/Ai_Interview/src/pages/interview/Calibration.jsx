@@ -1,13 +1,13 @@
 // src/pages/interview/Calibration.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom"; // ✅ useLocation 추가
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 
 // ===== 설정 =====
-const NEXT_PATH = "/interview/run/:sessionId"; // 저장 후 이동할 경로
-const CALIB_OVERLAY_DELAY_MS = 3000;   // 캘리브레이션 후 오버레이까지 대기
-const RECORD_DURATION_MS = 3000;       // 저장할 영상 길이
+const NEXT_BASE = "/interview/run";            // ✅ 실제 라우트 prefix
+const CALIB_OVERLAY_DELAY_MS = 3000;           // 캘리브레이션 후 오버레이까지 대기
+const RECORD_DURATION_MS = 3000;               // 저장할 영상 길이
 
 // MediaRecorder 지원 체크
 function isTypeSupported(type) {
@@ -31,6 +31,8 @@ const CHECKS = [
 
 const Calibration = () => {
   const navigate = useNavigate();
+  const { state } = useLocation();                      // ✅ DeviceTest → state로 전달받음
+  const interviewNo = state?.interviewNo ?? null;       // ✅ 세션/인터뷰 ID
 
   // 체크리스트
   const [checks, setChecks] = useState({
@@ -52,6 +54,15 @@ const Calibration = () => {
   const [stream, setStream] = useState(null);
   const mediaRecorderRef = useRef(null);
   const recordedTypeRef = useRef("");
+
+  // ✅ 인터뷰 번호 없으면 진입 가드(필요 시 원하는 경로로 보내세요)
+  useEffect(() => {
+    if (!interviewNo) {
+      // 안내만 하고 머물고 싶다면 이 부분을 주석 처리
+      // navigate("/interview/select", { replace: true });
+      // 대신 화면 상단에 경고만 표시 (아래 JSX 참고)
+    }
+  }, [interviewNo]);
 
   // 권한 요청
   const getMediaPermission = useCallback(async () => {
@@ -78,7 +89,7 @@ const Calibration = () => {
     v.play?.().catch(() => {});
   }, [stream]);
 
-  // 파일 저장
+  // 파일 저장 (로컬 다운로드)
   const saveBlobLocally = (blob, filename) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -123,6 +134,11 @@ const Calibration = () => {
     if (calibCooling || !calibStarted || isRecording) return;
 
     try {
+      if (!interviewNo) {
+        alert("interviewNo가 없습니다. 이전 단계에서 세션을 생성하고 다시 시도하세요.");
+        return;
+      }
+
       if (!stream) await getMediaPermission();
       setIsRecording(true);
 
@@ -162,7 +178,11 @@ const Calibration = () => {
           alert(`저장 오류: ${e.message ?? ""}`);
         } finally {
           setIsRecording(false);
-          navigate(NEXT_PATH);
+
+          // ✅ A 방법: 다음 페이지로 이동 (URL 파라미터 + state 둘 다 전달)
+          navigate(`${NEXT_BASE}/${interviewNo}`, { state: { interviewNo } });
+          // 만약 run 라우트가 state만 받는 구조라면:
+          // navigate("/interview/run", { state: { interviewNo } });
         }
       };
 
@@ -177,11 +197,22 @@ const Calibration = () => {
     }
   };
 
+  const startDisabled = calibCooling || !calibStarted || isRecording || !interviewNo; // ✅ 인터뷰 번호 없으면 비활성
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
       <Header />
       <main className="flex-1">
         <div className="mx-auto w-full max-w-6xl px-4 py-8">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-2xl font-semibold">캘리브레이션</h1>
+            {!interviewNo && (
+              <span className="text-sm text-rose-600">
+                인터뷰 번호(interviewNo)가 없습니다. 이전 단계에서 세션을 생성해주세요.
+              </span>
+            )}
+          </div>
+
           <div className="grid grid-cols-12 gap-6">
             {/* 왼쪽: 라이브 미리보기 */}
             <div className="col-span-12 lg:col-span-8">
@@ -270,12 +301,16 @@ const Calibration = () => {
                 </p>
                 <button
                   onClick={onClickStartInterview}
-                  disabled={calibCooling || !calibStarted || isRecording}
+                  disabled={startDisabled} // ✅ 인터뷰 번호 없으면 비활성
                   className={`h-10 px-4 rounded-lg w-full ${
-                    !calibCooling && calibStarted && !isRecording
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                    !startDisabled ? "bg-blue-600 text-white"
+                    : "bg-slate-200 text-slate-500 cursor-not-allowed"
                   }`}
+                  title={
+                    !interviewNo
+                      ? "세션 생성 후 다시 시도하세요."
+                      : (calibCooling || !calibStarted ? "캘리브레이션 후 진행 가능합니다." : "")
+                  }
                 >
                   {isRecording ? "저장 중..." : "면접 시작"}
                 </button>
