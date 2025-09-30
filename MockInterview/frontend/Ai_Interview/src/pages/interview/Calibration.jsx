@@ -1,13 +1,15 @@
 // src/pages/interview/Calibration.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom"; // ✅ useLocation 추가
+import { useNavigate, useLocation } from "react-router-dom";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 
 // ===== 설정 =====
-const NEXT_BASE = "/interview/run";            // ✅ 실제 라우트 prefix
-const CALIB_OVERLAY_DELAY_MS = 3000;           // 캘리브레이션 후 오버레이까지 대기
-const RECORD_DURATION_MS = 3000;               // 저장할 영상 길이
+const NEXT_BASE = "/interview/run";
+const CALIB_OVERLAY_DELAY_MS = 3000;   // 캘리 후 오버레이까지 대기
+const RECORD_DURATION_MS = 3000;       // 녹화 길이(ms)
+// 절대 URL 직행(프록시 미사용): 뒤에 슬래시 ❌
+const API_BASE = (import.meta.env.VITE_API_BASE || "http://172.31.57.139:8080").replace(/\/+$/, "");
 
 // MediaRecorder 지원 체크
 function isTypeSupported(type) {
@@ -29,10 +31,54 @@ const CHECKS = [
   { id: "light", label: "배경 정리 · 조명 준비" },
 ];
 
+// ===== 유틸 =====
+const mimeToExt = (mime = "video/webm") => {
+  const m = (mime || "").toLowerCase();
+  if (m.includes("webm")) return "webm";
+  if (m.includes("mp4")) return "mp4";
+  return "webm";
+};
+
+// 안전한 URL 조합 (BASE 뒤 슬래시/경로 앞 슬래시 중복 방지)
+const joinUrl = (base, path) =>
+  `${base.replace(/\/+$/, "")}/${String(path || "").replace(/^\/+/, "")}`;
+
+// 캘리 영상 업로드 (multipart/form-data)
+// - Content-Type 수동 지정하지 말 것(브라우저가 boundary 자동 부여)
+async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
+  if (!interviewNo) throw new Error("interviewNo가 없습니다.");
+
+  const ext = mimeToExt(mimeType);
+  const filename = `calibration_${Date.now()}.${ext}`;
+
+  const form = new FormData();
+  form.append("video", blob, filename); // 서버 스펙: 필드명 "video"
+
+  const url = joinUrl(API_BASE, `/api/interviews/${interviewNo}/calibration`);
+
+  const res = await fetch(url, {
+    method: "POST",
+    body: form,
+    // credentials: "include", // 쿠키 인증 필요 시 주석 해제
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`업로드 실패 (HTTP ${res.status}) ${text}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  // 명세: { "message": true } 성공 / { "message": false, "error": "..." } 실패
+  if (data?.message !== true) {
+    throw new Error(data?.error || "서버에서 실패 응답을 반환했습니다.");
+  }
+  return data;
+}
+
 const Calibration = () => {
   const navigate = useNavigate();
-  const { state } = useLocation();                      // ✅ DeviceTest → state로 전달받음
-  const interviewNo = state?.interviewNo ?? null;       // ✅ 세션/인터뷰 ID
+  const { state } = useLocation();         // DeviceTest 등 이전 단계에서 state로 전달
+  const interviewNo = state?.interviewNo ?? null;
 
   // 체크리스트
   const [checks, setChecks] = useState({
@@ -55,14 +101,12 @@ const Calibration = () => {
   const mediaRecorderRef = useRef(null);
   const recordedTypeRef = useRef("");
 
-  // ✅ 인터뷰 번호 없으면 진입 가드(필요 시 원하는 경로로 보내세요)
+  // 인터뷰 번호 없으면 경고만 노출 (필요 시 리다이렉트)
   useEffect(() => {
     if (!interviewNo) {
-      // 안내만 하고 머물고 싶다면 이 부분을 주석 처리
       // navigate("/interview/select", { replace: true });
-      // 대신 화면 상단에 경고만 표시 (아래 JSX 참고)
     }
-  }, [interviewNo]);
+  }, [interviewNo, navigate]);
 
   // 권한 요청
   const getMediaPermission = useCallback(async () => {
@@ -89,16 +133,6 @@ const Calibration = () => {
     v.play?.().catch(() => {});
   }, [stream]);
 
-  // 파일 저장 (로컬 다운로드)
-  const saveBlobLocally = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   // 캘리브레이션 버튼 클릭
   const onCalibrationStart = async () => {
     try {
@@ -107,7 +141,7 @@ const Calibration = () => {
       if (!stream) await getMediaPermission();
 
       setCalibCooling(true);
-      setCooldownLeft(CALIB_OVERLAY_DELAY_MS / 1000);
+      setCooldownLeft(Math.floor(CALIB_OVERLAY_DELAY_MS / 1000));
       const timer = setInterval(() => {
         setCooldownLeft((s) => {
           if (s <= 1) {
@@ -168,21 +202,22 @@ const Calibration = () => {
         if (e.data && e.data.size > 0) chunks.push(e.data);
       };
 
-      rec.onstop = () => {
+      // 로컬 저장 없이 업로드만 수행
+      rec.onstop = async () => {
         try {
           const type = recordedTypeRef.current || chunks[0]?.type || "video/webm";
           const merged = new Blob(chunks, { type });
-          saveBlobLocally(merged, `calibration_${Date.now()}.webm`);
+
+          // 서버로 업로드(8080 직행)
+          await uploadCalibration(interviewNo, merged, type);
+
+          // 성공 시 다음 페이지 이동
+          navigate(`${NEXT_BASE}/${interviewNo}`, { state: { interviewNo } });
         } catch (e) {
           console.error(e);
-          alert(`저장 오류: ${e.message ?? ""}`);
+          alert(`업로드 오류: ${e.message ?? ""}`);
         } finally {
           setIsRecording(false);
-
-          // ✅ A 방법: 다음 페이지로 이동 (URL 파라미터 + state 둘 다 전달)
-          navigate(`${NEXT_BASE}/${interviewNo}`, { state: { interviewNo } });
-          // 만약 run 라우트가 state만 받는 구조라면:
-          // navigate("/interview/run", { state: { interviewNo } });
         }
       };
 
@@ -197,7 +232,7 @@ const Calibration = () => {
     }
   };
 
-  const startDisabled = calibCooling || !calibStarted || isRecording || !interviewNo; // ✅ 인터뷰 번호 없으면 비활성
+  const startDisabled = calibCooling || !calibStarted || isRecording || !interviewNo;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
@@ -301,7 +336,7 @@ const Calibration = () => {
                 </p>
                 <button
                   onClick={onClickStartInterview}
-                  disabled={startDisabled} // ✅ 인터뷰 번호 없으면 비활성
+                  disabled={startDisabled}
                   className={`h-10 px-4 rounded-lg w-full ${
                     !startDisabled ? "bg-blue-600 text-white"
                     : "bg-slate-200 text-slate-500 cursor-not-allowed"
@@ -312,7 +347,7 @@ const Calibration = () => {
                       : (calibCooling || !calibStarted ? "캘리브레이션 후 진행 가능합니다." : "")
                   }
                 >
-                  {isRecording ? "저장 중..." : "면접 시작"}
+                  {isRecording ? "업로드 중..." : "면접 시작"}
                 </button>
               </div>
             </div>
@@ -320,7 +355,6 @@ const Calibration = () => {
         </div>
       </main>
 
-      {/* Footer 폭을 본문에 맞게 줄임 */}
       <Footer containerClass="max-w-6xl" />
     </div>
   );
