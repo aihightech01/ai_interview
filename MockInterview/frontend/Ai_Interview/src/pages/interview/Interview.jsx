@@ -139,7 +139,7 @@ export default function Interview() {
       return;
     }
 
-    const url = `${API_BASE}/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
+    const url = `${API_BASE}/api/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
     const isLast = (currentIdx ?? 0) === total - 1;
 
     // 공통 FormData
