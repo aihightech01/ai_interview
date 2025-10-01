@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { openStream, createMicMeter } from "../../utils/media";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
+import ChecklistBox from "../../components/interview/Checklist";
 
 export default function DeviceTest() {
   const nav = useNavigate();
@@ -109,27 +110,30 @@ export default function DeviceTest() {
 
             {/* 오른쪽: 체크리스트 & 스피커 테스트 */}
             <div className="space-y-4">
-              <div className="p-4 rounded-xl border bg-white">
-                <div className="font-medium mb-3">체크리스트</div>
-                <ul className="text-sm space-y-2 text-slate-700">
-                  <li>{ok.cam ? "✅" : "⏳"} 카메라 미리보기 정상 표시</li>
-                  <li>{ok.mic ? "✅" : "⏳"} 마이크 입력 레벨 감지</li>
-                  <li>{ok.spk ? "✅" : "⏳"} 스피커 테스트 완료(테스트음 재생)</li>
-                  <li>{ok.perm ? "✅" : "❌"} 브라우저 권한 허용됨</li>
-                </ul>
-
-                  <button
-                    type="button"
-                    className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                    onClick={() => {
-                      const a = new Audio("/beep.mp3");
-                      a.play().catch(err => console.warn("스피커 테스트 재생 실패:", err));
-                      setOk(o => ({ ...o, spk: true })); // 실패해도 통과 처리
-                    }}
-                  >
-                    스피커 테스트
-                  </button>
-
+              <div >
+                <ChecklistBox
+                  title="체크리스트"
+                  items={[
+                    { id: "cam", label: "카메라 미리보기 정상 표시", checked: ok.cam },
+                    { id: "mic", label: "마이크 입력 레벨 감지", checked: ok.mic},
+                    { id: "spk", label: "스피커 테스트 완료", checked: ok.spk},
+                    { id: "pren", label: "브라우저 권한 허용됨", checked: ok.perm},
+                       ]}
+                  extra={
+                      
+                    <button
+                      type="button"
+                      className="mt-4 inline-flex h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      onClick={() => {
+                        const a = new Audio("/beep.mp3");
+                        a.play().catch(err => console.warn("스피커 테스트 재생 실패:", err));
+                        setOk(o => ({ ...o, spk: true })); // 실패해도 통과 처리
+                      }}
+                    >
+                      스피커 테스트
+                    </button>
+                      }
+                    />
 
               </div>
 

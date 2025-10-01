@@ -52,7 +52,7 @@ async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
   const filename = `calibration_${Date.now()}.${ext}`;
 
   const form = new FormData();
-  form.append("video", blob, filename); // 서버 스펙: 필드명 "video"
+  form.append("video", blob, filename); 
 
   const url = joinUrl(API_BASE, `/api/interviews/${interviewNo}/calibration`);
 
