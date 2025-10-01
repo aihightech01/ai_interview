@@ -71,6 +71,7 @@ export default function Interview() {
   const mediaRef = useRef(null);
   const recorderRef = useRef(null);
   const skipSaveRef = useRef(false);
+  const API_BASE = "http://172.31.57.139:8080".replace(/\/+$/, ""); 
 
   // 선택 0개 가드
   useEffect(() => {
@@ -138,7 +139,7 @@ export default function Interview() {
       return;
     }
 
-    const url = `/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
+    const url = `${API_BASE}/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
     const isLast = (currentIdx ?? 0) === total - 1;
 
     // 공통 FormData
