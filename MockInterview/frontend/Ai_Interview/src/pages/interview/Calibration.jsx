@@ -23,13 +23,6 @@ const FALLBACK_WEBM_VP9 = "video/webm; codecs=vp9";
 const FALLBACK_WEBM_VP8 = "video/webm; codecs=vp8";
 const FALLBACK_WEBM = "video/webm";
 
-// 체크리스트 항목
-const CHECKS = [
-  { id: "framing", label: "눈/카메라 라인 프레이밍 정렬" },
-  { id: "eye", label: "시선 정면 유지 (면접관 응시)" },
-  { id: "noise", label: "상대 잡음 조정 · 불필요 최소화" },
-  { id: "light", label: "배경 정리 · 조명 준비" },
-];
 
 // ===== 유틸 =====
 const mimeToExt = (mime = "video/webm") => {
@@ -309,25 +302,7 @@ const Calibration = () => {
 
             {/* 오른쪽: 체크리스트 & 면접 시작 */}
             <div className="col-span-12 lg:col-span-4 space-y-6">
-              <div className="rounded-xl border bg-white p-6">
-                <h3 className="font-semibold mb-4">체크리스트</h3>
-                <div className="space-y-3 text-sm">
-                  {CHECKS.map((c) => (
-                    <label key={c.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        name={c.id}
-                        checked={checks[c.id]}
-                        onChange={(e) =>
-                          setChecks((prev) => ({ ...prev, [c.id]: e.target.checked }))
-                        }
-                        className="h-4 w-4"
-                      />
-                      <span>{c.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              
 
               <div className="rounded-xl border bg-white p-6">
                 <div className="text-xs text-slate-500 mb-3">완료 준비</div>

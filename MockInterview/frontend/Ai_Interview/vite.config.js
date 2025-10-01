@@ -24,5 +24,10 @@ export default defineConfig({
       //   changeOrigin: true,
       // },
     },
+    //  resolve: {
+    //alias: {
+     // "@app": path.resolve(__dirname, "src/exports.js")
+    //}
+  //},
   },
 });
