@@ -13,8 +13,8 @@ const btn = (variant = "default") => {
     "inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
   return {
     primary: `${base} bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-600`,
-    danger:  `${base} bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-600`,
-    ghost:   `${base} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-400`,
+    danger: `${base} bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-600`,
+    ghost: `${base} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-400`,
     outline: `${base} border-2 border-blue-600 text-blue-600 bg-white hover:bg-blue-50 focus:ring-blue-600`,
   }[variant] || `${base} bg-slate-800 text-white hover:bg-slate-900 focus:ring-slate-600`;
 };
@@ -100,7 +100,7 @@ export default function Interview() {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     if (mediaRef.current) {
       mediaRef.current.srcObject = stream;
-      try { await mediaRef.current.play(); } catch {}
+      try { await mediaRef.current.play(); } catch { }
     }
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
@@ -139,11 +139,14 @@ export default function Interview() {
     }
 
     const url = `/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
+
     const isLast = (currentIdx ?? 0) === total - 1;
 
     // 공통 FormData
     const fd = new FormData();
-    fd.append("video", blob, "answer.webm");
+    const ext = (blob?.type || "").includes("mp4") ? "mp4" : "webm";
+    const fname = `answer_q${questionNoNum}_${Date.now()}.${ext}`;
+    fd.append("video", blob, fname);
 
     try {
       setUploading(true);
@@ -158,7 +161,7 @@ export default function Interview() {
       } else {
         // ✅ 마지막 전: fire-and-forget (응답 안 기다림), 타임아웃 해제
         axiosInstance.post(url, fd, { timeout: 0 })
-          .then(() => {})
+          .then(() => { })
           .catch((e) => {
             // 조용히 로깅만 (다음 문제 진행 방해 X)
             console.warn("[Interview] (non-blocking) upload error:", e?.response?.data || e?.message);
@@ -219,8 +222,8 @@ export default function Interview() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-blue-600">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#2563eb" strokeWidth="2"/>
-                  <path d="M12 7v5l3 3" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="10" stroke="#2563eb" strokeWidth="2" />
+                  <path d="M12 7v5l3 3" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 <span className="text-sm font-semibold tabular-nums">{formatSec(sec)}</span>
               </div>

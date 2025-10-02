@@ -3,13 +3,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
+import axiosInstance from "../../utils/axiosInstance";
 
 // ===== 설정 =====
 const NEXT_BASE = "/interview/run";
 const CALIB_OVERLAY_DELAY_MS = 3000;   // 캘리 후 오버레이까지 대기
 const RECORD_DURATION_MS = 3000;       // 녹화 길이(ms)
-// 절대 URL 직행(프록시 미사용): 뒤에 슬래시 ❌
-const API_BASE = (import.meta.env.VITE_API_BASE || "http://172.31.57.139:8080").replace(/\/+$/, "");
 
 // MediaRecorder 지원 체크
 function isTypeSupported(type) {
@@ -23,14 +22,6 @@ const FALLBACK_WEBM_VP9 = "video/webm; codecs=vp9";
 const FALLBACK_WEBM_VP8 = "video/webm; codecs=vp8";
 const FALLBACK_WEBM = "video/webm";
 
-// 체크리스트 항목
-const CHECKS = [
-  { id: "framing", label: "눈/카메라 라인 프레이밍 정렬" },
-  { id: "eye", label: "시선 정면 유지 (면접관 응시)" },
-  { id: "noise", label: "상대 잡음 조정 · 불필요 최소화" },
-  { id: "light", label: "배경 정리 · 조명 준비" },
-];
-
 // ===== 유틸 =====
 const mimeToExt = (mime = "video/webm") => {
   const m = (mime || "").toLowerCase();
@@ -39,7 +30,7 @@ const mimeToExt = (mime = "video/webm") => {
   return "webm";
 };
 
-// 안전한 URL 조합 (BASE 뒤 슬래시/경로 앞 슬래시 중복 방지)
+// (옵션) 안전한 URL 조합 유틸 — 필요 시 사용
 const joinUrl = (base, path) =>
   `${base.replace(/\/+$/, "")}/${String(path || "").replace(/^\/+/, "")}`;
 
@@ -47,29 +38,23 @@ const joinUrl = (base, path) =>
 // - Content-Type 수동 지정하지 말 것(브라우저가 boundary 자동 부여)
 async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
   if (!interviewNo) throw new Error("interviewNo가 없습니다.");
+  if (!blob) throw new Error("업로드할 영상 데이터(blob)가 없습니다.");
 
   const ext = mimeToExt(mimeType);
   const filename = `calibration_${Date.now()}.${ext}`;
 
   const form = new FormData();
-  form.append("video", blob, filename); // 서버 스펙: 필드명 "video"
+  form.append("video", blob, filename);
 
-  const url = joinUrl(API_BASE, `/api/interviews/${interviewNo}/calibration`);
+  // axiosInstance.post로 바로 업로드 (fetch 사용 X)
+  const { data } = await axiosInstance.post(
+    `/interviews/${encodeURIComponent(interviewNo)}/calibration`,
+    form,
+    { timeout: 0 } // 업로드 오래 걸릴 수 있으니 타임아웃 해제
+  );
 
-  const res = await fetch(url, {
-    method: "POST",
-    body: form,
-    // credentials: "include", // 쿠키 인증 필요 시 주석 해제
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`업로드 실패 (HTTP ${res.status}) ${text}`);
-  }
-
-  const data = await res.json().catch(() => ({}));
-  // 명세: { "message": true } 성공 / { "message": false, "error": "..." } 실패
-  if (data?.message !== true) {
+  // 서버 명세: { message: true } 가 성공
+  if (!data || data.message !== true) {
     throw new Error(data?.error || "서버에서 실패 응답을 반환했습니다.");
   }
   return data;
@@ -77,10 +62,10 @@ async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
 
 const Calibration = () => {
   const navigate = useNavigate();
-  const { state } = useLocation();         // DeviceTest 등 이전 단계에서 state로 전달
+  const { state } = useLocation(); // DeviceTest 등 이전 단계에서 state로 전달
   const interviewNo = state?.interviewNo ?? null;
 
-  // 체크리스트
+  // 체크리스트 (필요 시 UI 연결)
   const [checks, setChecks] = useState({
     framing: false,
     eye: false,
@@ -208,7 +193,7 @@ const Calibration = () => {
           const type = recordedTypeRef.current || chunks[0]?.type || "video/webm";
           const merged = new Blob(chunks, { type });
 
-          // 서버로 업로드(8080 직행)
+          // 서버로 업로드
           await uploadCalibration(interviewNo, merged, type);
 
           // 성공 시 다음 페이지 이동
@@ -309,26 +294,6 @@ const Calibration = () => {
 
             {/* 오른쪽: 체크리스트 & 면접 시작 */}
             <div className="col-span-12 lg:col-span-4 space-y-6">
-              <div className="rounded-xl border bg-white p-6">
-                <h3 className="font-semibold mb-4">체크리스트</h3>
-                <div className="space-y-3 text-sm">
-                  {CHECKS.map((c) => (
-                    <label key={c.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        name={c.id}
-                        checked={checks[c.id]}
-                        onChange={(e) =>
-                          setChecks((prev) => ({ ...prev, [c.id]: e.target.checked }))
-                        }
-                        className="h-4 w-4"
-                      />
-                      <span>{c.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
               <div className="rounded-xl border bg-white p-6">
                 <div className="text-xs text-slate-500 mb-3">완료 준비</div>
                 <p className="text-sm text-slate-600 mb-4">

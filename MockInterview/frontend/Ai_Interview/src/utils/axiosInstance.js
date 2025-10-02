@@ -1,31 +1,38 @@
-// utils/axiosInstance.ts
+// utils/axiosInstance.js
 import axios from "axios";
-import { BASE_URL } from "./apiPaths";
+
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/+$/, "");
 
 const axiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 80000,
-  headers: { "Content-Type": "application/json", Accept: "application/json" },
+  headers: { Accept: "application/json" }, // 전역 Content-Type 고정 금지
 });
 
 axiosInstance.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // FormData면 Content-Type 제거 → 브라우저가 multipart 자동 설정
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  } else {
+    config.headers["Content-Type"] = "application/json";
+  }
   return config;
 });
 
 axiosInstance.interceptors.response.use(
   (res) => res,
   (error) => {
-    const url = error?.config?.url || "";
-    const status = error?.response?.status;
-
     if (error.request && !error.response) {
       console.error("[Network] 서버 응답 없음(프록시/서버/CORS 확인).");
       return Promise.reject(error);
     }
+    const status = error?.response?.status;
+    const path = error?.config?.url || "";
 
-    const isAuthApi = /\/api\/user\/(login|register)$/i.test(url);
+    const isAuthApi = /^\/?user\/(login|register)$/i.test(path.replace(/^\/api\/?/, ""));
     if (status === 401 && !isAuthApi) {
       localStorage.removeItem("token");
       if (window.location.pathname !== "/") window.location.href = "/";
