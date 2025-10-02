@@ -1,5 +1,5 @@
 // src/pages/Reports/SessionDetail.jsx
-import React, { useEffect, useMemo, useState,  } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
@@ -14,15 +14,16 @@ import {
   CartesianGrid,
   Legend,
   ReferenceLine,
+  ReferenceArea,   // ★ 추가
   Brush,
+  ComposedChart,    // ★ (선택) 미니 점수 트랙용
+  Bar,              // ★ (선택) 미니 점수 트랙용
 } from "recharts";
 
 import ChartDraggable from "../../components/ChartDraggable";
 import { parseEmotion, toEmotionChartData } from "../../utils/transformEmotion";
 
 /** 공통: 안전 파싱 */
-// safeParseJSON  문자열을 JSON으로 바꾸려고 할 때 쓰여요.
-// 서버가 뭘 주든 간에 바꿔주는 안전지대 역할
 function safeParseJSON(maybeJSON, fallback = null) {
   try {
     if (maybeJSON == null) return fallback;
@@ -59,37 +60,108 @@ function summarizeTopLabels(emotions) {
 /** 절대 URL 만들지 않고, 슬래시만 보정 */
 function toPath(p) {
   if (!p) return "";
-  // ★ FIX: 이미 절대 URL( http/https/blob )은 그대로, file:// 또는 로컬 경로(역슬래시 포함)는 막기
   const lower = String(p).toLowerCase();
-  if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("blob:")) return p; // ★ FIX
-  if (lower.startsWith("file:")) return ""; // ★ FIX: 브라우저 보안상 로컬 파일 접근 불가 → 빈 값
-  if (/[A-Za-z]:\\/.test(p)) return ""; // ★ FIX: Windows 로컬 경로도 비활성화
+  if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("blob:")) return p;
+  if (lower.startsWith("file:")) return "";
+  if (/[A-Za-z]:\\/.test(p)) return "";
   return p.startsWith("/") ? p : `/${p}`;
 }
 
-/** vision → 차트용 가공 (라디안 추정 시 °로 변환, tSec 추가) */
-function toVisionChartData(visionRaw, fps = 30) {
+/** vision → 차트용 가공 (라디안 추정 시 °로 변환, tSec 추가, score 포함) */
+function toVisionChartData(visionRaw, fps = 30, opts = { maWindow: 0 }) {
   const f = Math.max(1, Number(fps) || 30);
   const RAD2DEG = 180 / Math.PI;
   if (!Array.isArray(visionRaw)) return [];
-  return visionRaw.map((d) => {
+
+  const base = visionRaw.map((d) => {
     const frame = Number(d.frame);
     const headYaw = Number(d.head_yaw);
     const headPitch = Number(d.head_pitch);
     let gazeYaw = Number(d.gaze_yaw);
     let gazePitch = Number(d.gaze_pitch);
-    // 값 크기로 라디안 추정(대략 |3| 미만이면 rad일 확률 ↑) → ° 변환
+    let score = d.score != null ? Number(d.score) : null;
+
+    // 값 크기로 라디안 추정 → ° 변환
     if (Math.abs(gazeYaw) < 3 && Math.abs(gazePitch) < 3) {
       gazeYaw *= RAD2DEG;
       gazePitch *= RAD2DEG;
     }
+    // score 정규화(0~100)
+    if (Number.isFinite(score)) {
+      score = Math.max(0, Math.min(100, score));
+    } else {
+      score = null;
+    }
+
     return {
-      frame,               // 프레임 번호
-      tSec: frame / f,     // 초 단위 시간
-      headYaw, headPitch,  // ° 가정
-      gazeYaw, gazePitch,  // °로 통일
+      frame,
+      tSec: frame / f,
+      headYaw,
+      headPitch,
+      gazeYaw,
+      gazePitch,
+      score, // ★ 추가
     };
   });
+
+  // (선택) 이동평균
+  const w = Number(opts?.maWindow) || 0;
+  if (w > 1) {
+    const half = Math.floor(w / 2);
+    for (let i = 0; i < base.length; i++) {
+      let sum = 0, cnt = 0;
+      for (let j = i - half; j <= i + half; j++) {
+        if (j >= 0 && j < base.length && base[j].score != null) {
+          sum += base[j].score; cnt++;
+        }
+      }
+      base[i].score_ma = cnt ? sum / cnt : null;
+    }
+  }
+  return base;
+}
+
+/** 10프레임 단위(score) → 구간/스텝 시리즈 생성 (계단 그래프용) */
+function buildScoreSegments(visionRaw, binSize = 10, fps = 30) {
+  if (!Array.isArray(visionRaw) || !visionRaw.length) return { segments: [], stepSeries: [] };
+
+  // 대표 프레임(10,20,30…) 점수만 묶기
+  const map = new Map(); // key: binStart, val: score
+  for (const d of visionRaw) {
+    const frame = Number(d.frame);
+    const score = Number(d.score);
+    if (!Number.isFinite(frame) || !Number.isFinite(score)) continue;
+    const binStart = Math.floor(frame / binSize) * binSize;
+    map.set(binStart, Math.max(0, Math.min(100, score)));
+  }
+  if (map.size === 0) return { segments: [], stepSeries: [] };
+
+  // 구간 리스트 [start, end)
+  const starts = Array.from(map.keys()).sort((a, b) => a - b);
+  const maxFrame = Math.max(...visionRaw.map(v => Number(v.frame) || 0));
+  const segments = [];
+  for (let i = 0; i < starts.length; i++) {
+    const s = starts[i];
+    const e = (i < starts.length - 1)
+      ? starts[i + 1]
+      : (Math.floor((maxFrame + binSize) / binSize) * binSize);
+    const score = map.get(s);
+    segments.push({
+      startFrame: s,
+      endFrame: e,
+      score,
+      tStart: s / fps,
+      tEnd: e / fps,
+    });
+  }
+
+  // 스텝 라인 포인트(각 구간 시작/끝 두 점)
+  const stepSeries = [];
+  for (const seg of segments) {
+    stepSeries.push({ frame: seg.startFrame, score: seg.score });
+    stepSeries.push({ frame: seg.endFrame, score: seg.score });
+  }
+  return { segments, stepSeries };
 }
 
 /** 초 → 00:03.3 같은 포맷 */
@@ -97,7 +169,7 @@ function formatTime(sec) {
   const m = Math.floor(sec);
   const s = (sec - m).toFixed(1);
   const mm = Math.floor(m / 60);
-  const ss = (m % 60) + s.slice(1); // 소수점 포함
+  const ss = (m % 60) + s.slice(1);
   return `${String(mm).padStart(2, "0")}:${ss.padStart(4, "0")}`;
 }
 
@@ -112,50 +184,49 @@ export default function SessionDetail() {
   const [tab, setTab] = useState("면접 집중도");
   const [cursorTime, setCursorTime] = useState(0);
 
-useEffect(() => {
-  let ignore = false;
-
-  (async () => {
-    try {
-      setLoading(true);
-      setErr("");
-      const url = API_PATHS.USER.PROFILE_DETAIL(sessionId, videoNo);
-      const { data } = await api.get(url);
-
-      if (!ignore) {
-        setClip(prev => ({ ...(prev || {}), ...(data || {}) })); 
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setErr("");
+        const url = API_PATHS.USER.PROFILE_DETAIL(sessionId, videoNo);
+        const { data } = await api.get(url);
+        if (!ignore) setClip(prev => ({ ...(prev || {}), ...(data || {}) }));
+      } catch (e) {
+        if (!ignore) setErr("분석 데이터를 불러오지 못했습니다.");
+      } finally {
+        if (!ignore) setLoading(false);
       }
-    } catch (e) {
-      if (!ignore) setErr("분석 데이터를 불러오지 못했습니다.");
-    } finally {
-      if (!ignore) setLoading(false);
-    }
-  })();
-
-  return () => { ignore = true; };
-}, [sessionId, videoNo]);
-
+    })();
+    return () => { ignore = true; };
+  }, [sessionId, videoNo]);
 
   // 분석 파싱
   const analysis = useMemo(() => {
     const parsed = parseJSONDeep(clip?.analysis, {}) || {};
-    console.log("📌 [DEBUG] clip:", clip);
-    console.log("📌 [DEBUG] clip.analysis:", clip?.analysis);
-    console.log("📌 [DEBUG] parsed analysis:", parsed);
     return parsed;
   }, [clip]);
 
   // vision: 문자열/배열 모두 커버
   const visionRaw = useMemo(() => {
     const v = parseJSONDeep(analysis?.vision, []);
-    console.log("📌 [DEBUG] vision 원본:", analysis?.vision);
-    console.log("📌 [DEBUG] vision 파싱 후:", v);
     return Array.isArray(v) ? v : [];
   }, [analysis]);
 
-  // ★ FIX: 아래의 중복 선언/중첩 useMemo 블록 제거하고 한 번만 선언
-  const FPS = 30; // ★ FIX: 상단에서 공통 상수로 사용
-  const visionChartData = useMemo(() => toVisionChartData(visionRaw, FPS), [visionRaw]); // ★ FIX
+  const FPS = 30;
+
+  // ★ Vision 차트 데이터(+score, (옵션) MA 적용)
+  const visionChartData = useMemo(
+    () => toVisionChartData(visionRaw, FPS, { maWindow: 0 }),
+    [visionRaw]
+  );
+
+  // ★ 10프레임 단위 점수 세그먼트 & 스텝 시리즈
+  const { segments: scoreSegments, stepSeries: scoreStep } = useMemo(
+    () => buildScoreSegments(visionRaw, 10, FPS),
+    [visionRaw]
+  );
 
   // emotion/answer
   const emotions = useMemo(() => parseEmotion(analysis?.emotion), [analysis]);
@@ -163,17 +234,17 @@ useEffect(() => {
   const emotionChartData = useMemo(() => toEmotionChartData(emotions, 30), [emotions]);
   const emotionSummary = useMemo(() => summarizeTopLabels(emotions), [emotions]);
 
-  // ★ FIX: score 안전 파싱
+  // score(답변 스코어) 안전 파싱
   const score = useMemo(() => {
     if (answer?.score == null) return null;
     const n = Number(answer.score);
     return Number.isFinite(n) ? n : null;
   }, [answer]);
 
-  // 비디오/썸네일 경로 (프록시 사용: /videos → 백엔드)
+  // 비디오/썸네일 경로
   let videoUrl = "";
   if (clip?.videoNo != null) {
-    videoUrl = toPath(API_PATHS?.VIDEOS?.STREAM?.(clip.videoNo)); // /videos/stream/:no
+    videoUrl = toPath(API_PATHS?.VIDEOS?.STREAM?.(clip.videoNo));
   } else if (clip?.videoStreamUrl) {
     const templated = clip.videoStreamUrl;
     const resolved = templated.includes("{videoNo}")
@@ -181,8 +252,6 @@ useEffect(() => {
       : templated;
     videoUrl = toPath(resolved);
   }
-
-  // ★ FIX: 썸네일이 Windows 경로/파일 URL이면 비활성화
   const thumbUrl = toPath(clip?.thumbnailDir);
 
   if (loading) return <div className="p-6">로딩중…</div>;
@@ -237,8 +306,8 @@ useEffect(() => {
             <h3 className="text-sm font-medium mb-2">포인트</h3>
             <ul className="text-sm text-gray-700 list-disc pl-4 space-y-1">
               <li>시선 각도(head/gaze) 변화 추세 파악</li>
-              <li>감정 확률의 급격한 피크 구간 확인</li>
-              <li>개선 답변을 다음 답변 스크립트에 반영</li>
+              <li>10프레임 단위 집중도(Score) 저하 구간 확인</li>
+              <li>개선 포인트를 다음 답변 스크립트에 반영</li>
             </ul>
           </div>
         </section>
@@ -278,37 +347,89 @@ useEffect(() => {
 
             {/* 우: 탭 컨텐츠 */}
             <div className="min-w-0">
-              {/* 면접 집중도 (Vision) */}
+              {/* 면접 집중도 (Vision + Score[10f]) */}
               {tab === "면접 집중도" && (
                 <>
-                  <p className="text-xs text-gray-500 mb-2">프레임별 시선/머리 각도 변화</p>
+                  <p className="text-xs text-gray-500 mb-2">프레임별 시선/머리 각도 + 10프레임 단위 집중도</p>
                   <div className="rounded-xl border border-gray-200 bg-white p-3">
                     {visionChartData.length ? (
-                      <div className="w-full min-w-0">
+                      <>
                         <ResponsiveContainer width="100%" height={300}>
-                          <LineChart data={visionChartData} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
+                          <LineChart data={visionChartData} margin={{ top: 10, right: 24, bottom: 10, left: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" />
-                            {/* 프레임을 시간으로 보여주기 */}
                             <XAxis
                               dataKey="frame"
                               tick={{ fontSize: 11 }}
-                              tickFormatter={(f) => formatTime(Number(f) / FPS)} // ★ FIX: FPS 사용 일관화
+                              tickFormatter={(f) => formatTime(Number(f) / FPS)}
                             />
-                            <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+                            {/* 왼쪽: 각도(°) */}
+                            <YAxis yAxisId="deg" tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
+                            {/* 오른쪽: 점수(%) */}
+                            <YAxis yAxisId="score" orientation="right" tick={{ fontSize: 11 }} domain={[0, 100]} />
+
                             <Tooltip
-                              formatter={(v, name) => [`${Number(v).toFixed(2)}°`, name]}
-                              labelFormatter={(f) => `frame ${f} (${formatTime(Number(f) / FPS)})`} // ★ FIX
+                              formatter={(v, name, ctx) => {
+                                const key = ctx?.dataKey;
+                                if (key === "score" || key === "scoreStep" || key === "score_ma")
+                                  return [`${Number(v).toFixed(0)}%`, name];
+                                return [`${Number(v).toFixed(2)}°`, name];
+                              }}
+                              labelFormatter={(f) => `frame ${f} (${formatTime(Number(f) / FPS)})`}
                             />
                             <Legend />
-                            <ReferenceLine y={0} stroke="#999" strokeDasharray="4 3" />
-                            <Line type="monotone" dataKey="headYaw" name="Head Yaw" dot={false} stroke="#2563eb" strokeWidth={2} />
-                            <Line type="monotone" dataKey="gazeYaw" name="Gaze Yaw" dot={false} stroke="#16a34a" strokeWidth={2} />
-                            <Line type="monotone" dataKey="headPitch" name="Head Pitch" dot={false} stroke="#7c3aed" strokeWidth={1.5} />
-                            <Line type="monotone" dataKey="gazePitch" name="Gaze Pitch" dot={false} stroke="#ea580c" strokeWidth={1.5} />
+
+                            {/* 기준선 */}
+                            <ReferenceLine y={0} yAxisId="deg" stroke="#999" strokeDasharray="4 3" />
+                            <ReferenceLine y={70} yAxisId="score" stroke="#22c55e" strokeDasharray="4 3" />
+                            <ReferenceLine y={40} yAxisId="score" stroke="#f59e0b" strokeDasharray="4 3" />
+
+                            {/* ★ 점수 구간 배경 하이라이트 */}
+                            {scoreSegments.map((seg, i) => {
+                              const fill =
+                                seg.score < 40 ? "#ef44441a" :
+                                seg.score < 70 ? "#f59e0b1a" :
+                                null;
+                              if (!fill) return null;
+                              return (
+                                <ReferenceArea
+                                  key={`seg-${i}`}
+                                  x1={seg.startFrame}
+                                  x2={seg.endFrame}
+                                  yAxisId="deg"
+                                  strokeOpacity={0}
+                                  fill={fill}
+                                />
+                              );
+                            })}
+
+                            {/* 각도 라인 */}
+                            {/*<Line yAxisId="deg" type="monotone" dataKey="headYaw"   name="Head Yaw"   dot={false} stroke="#2563eb" strokeWidth={2} />
+                            <Line yAxisId="deg" type="monotone" dataKey="gazeYaw"   name="Gaze Yaw"   dot={false} stroke="#16a34a" strokeWidth={2} />
+                            <Line yAxisId="deg" type="monotone" dataKey="headPitch" name="Head Pitch" dot={false} stroke="#7c3aed" strokeWidth={1.5} />
+                            <Line yAxisId="deg" type="monotone" dataKey="gazePitch" name="Gaze Pitch" dot={false} stroke="#ea580c" strokeWidth={1.5} />
+                            <Line yAxisId="deg" type="monotone" dataKey="score" name="score" dot={false} stroke="#fa5700ff" strokeWidth={1.5} />
+
+                            {/* ★ 10프레임 단위 점수 스텝 라인 */}
+                            {scoreStep.length > 0 && (
+                              <Line
+                                yAxisId="score"
+                                //name="Focus Score(10f)"
+                                type="stepAfter"
+                                data={scoreStep}
+                                dataKey="score"
+                                dot={false}
+                                stroke="#e90e95ff"
+                                strokeWidth={1.6}
+                                isAnimationActive={false}
+                              />
+                            )}
+
                             <Brush dataKey="frame" height={16} travellerWidth={8} />
                           </LineChart>
                         </ResponsiveContainer>
-                      </div>
+
+
+                      </>
                     ) : (
                       <div className="text-xs text-gray-500">
                         표시할 시선/머리각 데이터가 없습니다. (vision length: {Array.isArray(visionRaw) ? visionRaw.length : 0})
@@ -318,7 +439,7 @@ useEffect(() => {
                 </>
               )}
 
-              {/* 표정(경면 변화) (Emotion) */}
+              {/* 표정(경면 변화) */}
               {tab === "표정(경면 변화)" && (
                 <>
                   <p className="text-xs text-gray-500 mb-2">프레임별 감정 확률(%)</p>
@@ -361,7 +482,7 @@ useEffect(() => {
               {tab === "답변 분석" && (
                 <>
                   <p className="text-xs text-gray-500 mb-2">AI 답변 코칭</p>
-                  <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-800 space-y-3">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm text-gray-800 space-y-3">
                     <div>
                       <p className="text-[11px] text-gray-500">개선 답변</p>
                       <p className="mt-1 whitespace-pre-line">{answer?.improved_answer || "제공된 개선 답변이 없습니다."}</p>
@@ -389,7 +510,9 @@ useEffect(() => {
             {/* 하단 권고/주의 */}
             <div className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 p-4">
               <p className="text-sm font-medium mb-1">권고사항</p>
-              <p className="text-sm">시선 이탈/좌우 흔들림 구간이 감지됩니다. 카메라를 눈높이에 맞추고, 문장 사이 호흡-멈춤(0.5~1s)을 넣어 안정감을 주세요.</p>
+              <p className="text-sm">
+                시선 이탈/좌우 흔들림 구간이 감지됩니다. 카메라를 눈높이에 맞추고, 문장 사이 호흡-멈춤(0.5~1s)을 넣어 안정감을 주세요.
+              </p>
             </div>
           </div>
         </section>
