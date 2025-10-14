@@ -24,7 +24,7 @@ const Header = () => {
         {/* 로고: 로그인 시 마이페이지, 비로그인 시 홈으로 이동 */}
         <button
           className="font-semibold tracking-tight text-gray-900 hover:opacity-80 transition cursor-pointer"
-          onClick={() => navigate(isAuth ? "/mypage" : "/")}
+          onClick={() => navigate(isAuth ? "/" : "/")}
           aria-label="홈으로 이동"
           title="AI 면접 코치"
         >
@@ -34,12 +34,6 @@ const Header = () => {
         {/* 네비게이션 */}
         {!isAuth ? (
           <nav className="flex items-center gap-2">
-            <button
-              onClick={() => navigate("/")}
-              className={linkCls(pathname === "/")}
-            >
-              Home
-            </button>
             <button
               onClick={() => navigate("/login")}
               className={linkCls(pathname === "/login")}

@@ -26,7 +26,7 @@ const Login = () => {
       { id, pw },
       {
         onSuccess: () => {
-          navigate("/mypage", { replace: true }); // 성공 시 이동
+          navigate("/", { replace: true }); // 성공 시 이동
         },
         onError: (err) => {
           const msg =

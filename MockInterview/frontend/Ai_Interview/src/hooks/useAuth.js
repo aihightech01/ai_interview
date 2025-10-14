@@ -17,7 +17,7 @@ export const useLogin = () => {
       const { token, user } = data || {};
       if (!token) throw new Error("토큰 없음");
       setAuth({ token, user: user ?? { id: variables.id } });
-      // 사용자 전환/초기 로그인 시 캐시 초기화 (가장 안전)
+
       queryClient.clear();
     },
   });
@@ -32,6 +32,6 @@ export const useLogout = () => {
     try {
       queryClient.clear();
     } catch {}
-    window.location.replace("/login");
+    window.location.replace("/");
   };
 };
