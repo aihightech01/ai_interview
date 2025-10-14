@@ -1,123 +1,199 @@
-// src/pages/interview/Select.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
-import axiosInstance from "../../utils/axiosInstance"; // 공용 axios 인스턴스
+import axiosInstance from "../../utils/axiosInstance";
+import { useMutation } from "@tanstack/react-query";
+import { useAuthStore } from "../../stores/authStore";
+import { toast } from "react-hot-toast";
+
+// ✅ 통일된 버튼 스타일
+const btn = (variant = "primary") => {
+  const base =
+    "inline-flex items-center justify-center h-11 px-6 rounded-xl text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed";
+  const primary = "bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-300";
+  const success = "bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-300";
+  return `${base} ${variant === "primary" ? primary : success}`;
+};
 
 export default function Select() {
   const nav = useNavigate();
-  const [loadingType, setLoadingType] = useState(null); // 1 | 2 | null
+  const token = useAuthStore((s) => s.token);
+  const isAuth = !!token;
+  const [loadingType, setLoadingType] = useState(null);
 
-  // 공용 토큰 헬퍼: accessToken 또는 token 중 존재하는 값 사용
-  const getToken = () =>
-    localStorage.getItem("accessToken") || localStorage.getItem("token") || "";
-
-  // 공통 시작 함수
-  async function startInterview(interviewType) {
-    try {
-      setLoadingType(interviewType);
-
-      // 로그인 여부 확인
-      const token = getToken();
-      if (!token) {
-        alert("로그인이 필요합니다.");
-        nav("/login");
-        return;
-      }
-
-      // NOTE:
-      // - axiosInstance.baseURL이 "/api"라면 이 경로는 "/api/interviews/start"로 전송됩니다.
-      // - baseURL이 "http://localhost:8080"이라면 서버 라우트에 맞춰 "/api/interviews/start" 또는 "/interviews/start"로 조정하세요.
-      const res = await axiosInstance.post(
-        "/interviews/start",
-        { interviewType } // 1=실전, 2=모의
-        // 헤더/withCredentials는 axiosInstance 인터셉터/설정에 위임
-      );
-
-      // 응답: { interviewNo: number }
-      const { interviewNo } = res?.data || {};
-      if (!interviewNo && interviewNo !== 0) {
-        throw new Error("인터뷰 번호를 받지 못했습니다.");
-      }
-
-      // 면접 동안 유지: 세션 스토리지에 저장
+  const startMutation = useMutation({
+    mutationFn: async (interviewType) => {
+      const { data } = await axiosInstance.post("/interviews/start", { interviewType });
+      return data;
+    },
+    onMutate: (type) => setLoadingType(type),
+    onSuccess: ({ interviewNo }, interviewType) => {
+      if (interviewNo == null) throw new Error("인터뷰 번호를 받지 못했습니다.");
       sessionStorage.setItem("interviewNo", String(interviewNo));
       sessionStorage.setItem("interviewType", String(interviewType));
-
-      // 다음 페이지로 이동
       nav("/interview/resume");
-    } catch (err) {
+    },
+    onError: (err) => {
       console.error(err);
-      alert("인터뷰 시작에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-    } finally {
-      setLoadingType(null);
+      toast.error("인터뷰 시작에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    },
+    onSettled: () => setLoadingType(null),
+    retry: false,
+  });
+
+  const handleStart = (type) => {
+    if (!isAuth) {
+      toast.error("로그인이 필요합니다.", {
+        icon: "🔐",
+        duration: 2500,
+        position: "top-center",
+        style: {
+          background: "#333",
+          color: "#fff",
+          borderRadius: "10px",
+          fontSize: "14px",
+        },
+      });
+      setTimeout(() => nav("/login"), 1200);
+      return;
     }
-  }
+    if (startMutation.isPending) return;
+    startMutation.mutate(type);
+  };
 
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC]">
       <Header />
 
-      <main className="max-w-[1200px] mx-auto px-4 py-8">
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* 실전 면접 카드 */}
-          <section className="p-8 rounded-2xl border bg-white shadow-sm">
-            <h2 className="text-xl font-semibold mb-6">실전 면접</h2>
-
-            <div className="w-24 h-24 rounded-full bg-green-100 border border-green-200 shadow-inner
-                            flex items-center justify-center text-3xl font-bold text-green-600 mb-6">
-              A+
-            </div>
-
-            <ul className="space-y-1.5 text-sm text-gray-700 mb-8">
-              <li>실제 면접과 유사한 환경에서의 면접 연습</li>
-              <li>다양한 면접 유형에 대한 연습 기회 제공</li>
-              <li>나의 이력서를 기반으로 한 면접 시뮬레이션</li>
-              <li>단계에 기반한 점수화 점검</li>
-              <li>AI 분석을 통한 맞춤형 피드백 제공</li>
-              <li>종합 리포트 및 면접 결과 가능성 제공</li>
-            </ul>
-
-            <button
-              onClick={() => startInterview(1)}
-              disabled={loadingType === 1}
-              className="px-4 h-9 rounded bg-green-600 text-white text-sm hover:bg-green-700 disabled:opacity-60"
-            >
-              {loadingType === 1 ? "시작 중..." : "실전 면접 시작하기"}
-            </button>
-          </section>
-
-          {/* 모의 면접 카드 */}
-          <section className="p-8 rounded-2xl border bg-white shadow-sm">
-            <h2 className="text-xl font-semibold mb-6">모의 면접</h2>
-
-            <div className="w-24 h-24 rounded-full bg-blue-100 border border-blue-200 shadow-inner
-                            flex items-center justify-center text-3xl mb-6">
-              🙂
-            </div>
-
-            <ul className="space-y-1.5 text-sm text-gray-700 mb-8">
-              <li>다양한 면접 유형에 대한 연습 기회 제공</li>
-              <li>나의 이력서를 기반으로 한 면접 시뮬레이션</li>
-              <li>AI 분석을 통한 영상·음성 피드백 제공</li>
-              <li>훈련 리포트 및 면접 결과 가능성 제공</li>
-              <li>단계에 기반한 점수화 점검</li>
-              <li>이전 리포트를 대비 성장 지표 제공</li>
-            </ul>
-
-            <button
-              onClick={() => startInterview(2)}
-              disabled={loadingType === 2}
-              className="px-4 h-9 rounded bg-[#3B82F6] text-white text-sm hover:opacity-90 disabled:opacity-60"
-            >
-              {loadingType === 2 ? "시작 중..." : "면접 연습 시작하기"}
-            </button>
-          </section>
+      <section className="bg-gradient-to-b from-white to-[#F7FAFC] border-b border-gray-100">
+        <div className="max-w-[1200px] mx-auto px-4 py-12 text-center">
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-gray-900">
+            어떤 면접을 시작하시겠어요?
+          </h1>
+          <p className="mt-3 text-gray-600 text-[15px]">
+            실제 면접처럼 긴장감을 느끼고 싶다면 <b>실전 면접</b>을,  
+            편하게 연습하고 싶다면 <b>모의 면접</b>을 선택하세요.
+          </p>
         </div>
+      </section>
+
+      <main className="max-w-[1200px] mx-auto px-4 py-12 grid md:grid-cols-2 gap-10">
+        {/* 실전 면접 카드 */}
+        <Card gradient="from-emerald-50 via-white to-white">
+          <CardHeader
+            title="실전 면접"
+            color="emerald"
+            emoji="🔥"
+            desc="실제 면접과 거의 동일한 환경에서 몰입형 시뮬레이션을 경험하세요."
+          />
+
+          <Divider />
+
+          <ul className="space-y-2 text-sm text-gray-700 mt-4">
+            <li>✔ 내 이력서를 기반으로 한 맞춤 질문</li>
+            <li>✔ 다단계 평가 시스템과 결과 리포트</li>
+            <li>✔ AI 기반 영상·음성 피드백 제공</li>
+          </ul>
+
+          <div className="mt-8 flex justify-end">
+            <button
+              onClick={() => handleStart(1)}
+              disabled={loadingType === 1 || startMutation.isPending}
+              className={btn("success")}
+            >
+              {loadingType === 1 ? <Spinner label="시작 중..." /> : "실전 면접 시작하기"}
+            </button>
+          </div>
+        </Card>
+
+        {/* 모의 면접 카드 */}
+        <Card gradient="from-blue-50 via-white to-white">
+          <CardHeader
+            title="모의 면접"
+            color="blue"
+            emoji="🙂"
+            desc="부담 없이 연습하고 AI의 피드백을 통해 실력을 키워보세요."
+          />
+
+          <Divider />
+
+          <ul className="space-y-2 text-sm text-gray-700 mt-4">
+            <li>✔ 자유로운 질문 선택과 답변 연습</li>
+            <li>✔ 영상 분석을 통한 감정/시선 피드백</li>
+            <li>✔ 반복 학습 리포트 및 성장 추적</li>
+          </ul>
+
+          <div className="mt-8 flex justify-end">
+            <button
+              onClick={() => handleStart(2)}
+              disabled={loadingType === 2 || startMutation.isPending}
+              className={btn("primary")}
+            >
+              {loadingType === 2 ? <Spinner label="시작 중..." /> : "면접 연습 시작하기"}
+            </button>
+          </div>
+        </Card>
       </main>
 
-      <Footer />
+
     </div>
+  );
+}
+
+/* -------------------- 컴포넌트 -------------------- */
+function Card({ gradient, children }) {
+  return (
+    <section
+      className={`p-10 rounded-3xl border border-gray-100 bg-gradient-to-br ${gradient}
+        shadow-sm hover:shadow-md hover:border-gray-200 transition min-h-[440px] flex flex-col justify-between`}
+    >
+      {children}
+    </section>
+  );
+}
+
+function CardHeader({ title, emoji, desc, color = "blue" }) {
+  const colorMap = {
+    emerald: "text-emerald-600 bg-emerald-100 border-emerald-200",
+    blue: "text-blue-600 bg-blue-100 border-blue-200",
+  };
+  return (
+    <div className="flex items-center gap-4">
+      <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border ${colorMap[color]}`}>
+        <span className="text-3xl">{emoji}</span>
+      </div>
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+        <p className="mt-1 text-sm text-gray-600">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+function Divider() {
+  return <hr className="mt-6 border-t border-gray-100" />;
+}
+
+function Spinner({ label = "로딩 중..." }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <svg className="animate-spin h-4 w-4 text-current" viewBox="0 0 24 24">
+        <circle
+          className="opacity-25"
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth="4"
+        ></circle>
+        <path
+          className="opacity-75"
+          fill="currentColor"
+          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+        ></path>
+      </svg>
+      <span>{label}</span>
+    </span>
   );
 }
