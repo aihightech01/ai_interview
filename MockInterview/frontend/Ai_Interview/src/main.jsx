@@ -3,22 +3,22 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { AuthProvider } from "./context/AuthContext";
 
-//async function enableMocking() {
-//  if (!import.meta.env.DEV) return;
-//  const { worker } = await import("./mocks/browser");
-//  await worker.start({
-//    onUnhandledRequest: "bypass", // 핸들러 없는 요청은 네트워크로 통과(경고 제거)
-//  });
-//}
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./utils/queryClient";
 
-//enableMocking().then(() => {
-  ReactDOM.createRoot(document.getElementById("root")).render(
-    <React.StrictMode>
-          <AuthProvider>
+// (선택) MSW를 쓰면 주석 해제해서 사용 가능
+// async function enableMocking() {
+//   if (!import.meta.env.DEV) return;
+//   const { worker } = await import("./mocks/browser");
+//   await worker.start({ onUnhandledRequest: "bypass" });
+// }
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+
+    <QueryClientProvider client={queryClient}>
       <App />
-      </AuthProvider>
-    </React.StrictMode>
-  );
-//});
+    </QueryClientProvider>
+  </React.StrictMode>
+);

@@ -13,8 +13,8 @@ const btn = (variant = "default") => {
     "inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
   return {
     primary: `${base} bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-600`,
-    danger:  `${base} bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-600`,
-    ghost:   `${base} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-400`,
+    danger: `${base} bg-rose-600 text-white hover:bg-rose-700 focus:ring-rose-600`,
+    ghost: `${base} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 focus:ring-slate-400`,
     outline: `${base} border-2 border-blue-600 text-blue-600 bg-white hover:bg-blue-50 focus:ring-blue-600`,
   }[variant] || `${base} bg-slate-800 text-white hover:bg-slate-900 focus:ring-slate-600`;
 };
@@ -100,7 +100,7 @@ export default function Interview() {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     if (mediaRef.current) {
       mediaRef.current.srcObject = stream;
-      try { await mediaRef.current.play(); } catch {}
+      try { await mediaRef.current.play(); } catch { }
     }
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
@@ -123,20 +123,27 @@ export default function Interview() {
     setRec(false);
   }
 
-  // 업로드 → 마지막만 응답 대기
+  // 업로드 → 즉시 이동(Optimistic), 마지막도 fire-and-forget
   async function uploadAndNext() {
-    if (!blob || !q) return;
+    if (!blob || !q) { L("warn", "Interview", "uploadAndNext blocked: no blob or no question"); return; }
+
+    L("info", "Interview", "uploadAndNext", {
+      interviewNoNum, questionId: q.questionId, currentIdx, total, blobSize: blob?.size
+    });
 
     if (!Number.isFinite(interviewNoNum)) {
       alert("면접 세션 번호(interviewNo)가 유효하지 않습니다. 처음부터 다시 진행해 주세요.");
+      L("error", "Interview", "invalid interviewNoNum", interviewNoNum);
       nav("/interview/select");
       return;
     }
     const questionNoNum = Number.parseInt(String(q.questionId).trim(), 10);
     if (!Number.isFinite(questionNoNum)) {
       alert("질문 번호가 유효하지 않습니다.");
+      L("error", "Interview", "invalid questionNoNum", q.questionId);
       return;
     }
+
 
     const url = `/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
     const isLast = (currentIdx ?? 0) === total - 1;
@@ -147,46 +154,52 @@ export default function Interview() {
 
     try {
       setUploading(true);
+      L("info", "Interview", "POST begin", { url, isLast });
 
-      if (isLast) {
-        // ✅ 마지막 문제: 응답을 끝까지 기다림 + 타임아웃 해제
-        const { data } = await axiosInstance.post(url, fd, { timeout: 0 });
-        if (!data || data.message !== true) {
-          const reason = data?.error ? `\n사유: ${data.error}` : "";
-          throw new Error("업로드 실패" + reason);
-        }
-      } else {
-        // ✅ 마지막 전: fire-and-forget (응답 안 기다림), 타임아웃 해제
-        axiosInstance.post(url, fd, { timeout: 0 })
-          .then(() => {})
-          .catch((e) => {
-            // 조용히 로깅만 (다음 문제 진행 방해 X)
-            console.warn("[Interview] (non-blocking) upload error:", e?.response?.data || e?.message);
+      // ✅ 모든 문항: 응답을 기다리지 않고 백그라운드 업로드
+      axiosInstance.post(url, fd, { timeout: 0 })
+        .then((res) => {
+          L("info", "Interview", "POST success (non-blocking)", { status: res?.status, data: res?.data });
+        })
+        .catch((e) => {
+          L("warn", "Interview", "POST error (non-blocking)", {
+            status: e?.response?.status, data: e?.response?.data, message: e?.message
           });
-      }
+        });
     } catch (e) {
-      console.error("[Interview] video upload error:", e);
-      // 마지막이 아닌 경우에도 사용자는 다음으로 이동하므로
-      // 여기선 알림을 띄워 원인 파악만 돕고 흐름은 유지할 수 있음.
+      L("error", "Interview", "POST exception", e);
       alert("영상 업로드에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.");
-      if (isLast) {
-        setUploading(false);
-        return; // 마지막에서 실패면 여기서 중단
-      }
     } finally {
       setUploading(false);
+      L("info", "Interview", "POST finally");
     }
 
-    // 다음 문항으로 진행 (선택한 개수만큼)
+
+    // 다음 문항 또는 마이페이지로
     const next = (currentIdx ?? 0) + 1;
     if (next < total) {
       setBlob(null);
       setSec(0);
       typeof setIdx === "function" ? setIdx(next) : null;
     } else {
-      nav("/mypage");
+      // ✅ 마지막: 즉시 마이페이지로 이동 + '분석중' 플래그 전달
+      try {
+        const key = "aiInterview.processing";
+        const payload = {
+          interviewNo: interviewNoNum,
+          status: "processing",
+          startedAt: Date.now(),
+        };
+        localStorage.setItem(key, JSON.stringify(payload));
+      } catch { }
+
+      nav("/mypage", {
+        state: { analyzing: true, interviewNo: interviewNoNum },
+        replace: true,
+      });
     }
   }
+
 
   // 재촬영
   function resetTake() {
@@ -219,8 +232,8 @@ export default function Interview() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-blue-600">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#2563eb" strokeWidth="2"/>
-                  <path d="M12 7v5l3 3" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="12" cy="12" r="10" stroke="#2563eb" strokeWidth="2" />
+                  <path d="M12 7v5l3 3" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 <span className="text-sm font-semibold tabular-nums">{formatSec(sec)}</span>
               </div>

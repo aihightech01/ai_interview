@@ -1,19 +1,18 @@
 // src/components/Header.jsx
 import React from "react";
-
-// 현재 페이지 경로(pathname)와 페이지 이동 함수(navigate)를 가져오기 위해
-// react-router-dom의 useLocation, useNavigate 훅을 임포트합니다.
 import { useLocation, useNavigate } from "react-router-dom";
-
-// 로그인/인증 정보를 가져오기 위해 AuthContext에서 만든 커스텀 훅을 불러옵니다.
-import { useAuth } from "../context/AuthContext";
+import { useAuthStore } from "../stores/authStore";      // ✅ Zustand 스토어
+import { useLogout } from "../hooks/useAuth"; // ✅ React Query 훅(로그아웃용)
 
 const Header = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { user, isAuth } = useAuth();
 
-  // 액티브 링크 스타일
+  const { user, token } = useAuthStore(); // ✅ Zustand에서 인증 정보 읽기
+  const isAuth = !!token;
+  const logout = useLogout(); // ✅ useLogout 훅 (스토어·캐시·라우팅 정리)
+
+  // 버튼/링크 공통 스타일 함수
   const linkCls = (active) =>
     `px-3 py-2 rounded-xl text-sm transition ${
       active ? "bg-gray-900 text-white" : "hover:bg-gray-100 text-gray-700"
@@ -22,7 +21,7 @@ const Header = () => {
   return (
     <header className="sticky top-0 z-30 bg-white/70 backdrop-blur border-b border-gray-200">
       <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
-        {/* 로고: 로그인 시 마이페이지로 이동 */}
+        {/* 로고: 로그인 시 마이페이지, 비로그인 시 홈으로 이동 */}
         <button
           className="font-semibold tracking-tight text-gray-900 hover:opacity-80 transition cursor-pointer"
           onClick={() => navigate(isAuth ? "/mypage" : "/")}
@@ -62,6 +61,12 @@ const Header = () => {
               className="text-sm text-gray-700 font-medium hover:text-blue-600 transition"
             >
               {user?.name ?? "사용자"} 님
+            </button>
+            <button
+              onClick={logout}
+              className="px-3 py-2 rounded-xl text-sm text-gray-700 hover:bg-gray-100"
+            >
+              로그아웃
             </button>
           </nav>
         )}

@@ -1,13 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Modal from "../../components/Modal";
-import { useAuth } from "../../context/AuthContext";
-import api from "../../utils/axiosInstance"; // ✅ 방금 만든 axios 인스턴스
+import api from "../../utils/axiosInstance";           // axios 인스턴스 (401 처리 포함)
+import { useAuthStore } from "../../stores/authStore";
+import { useLogout } from "../../hooks/useAuth"; 
+
 
 const STORAGE_KEY = "ai-coach-profile";
 
 const MyPage = () => {
-  const { user, isAuth, logout } = useAuth();
+  // ✅ AuthContext 제거 → Zustand로 대체
+  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const isAuth = !!token;
+  const doLogout = useLogout();
+
   const navigate = useNavigate();
 
   const [tab, setTab] = useState("실전 면접");
@@ -26,7 +33,7 @@ const MyPage = () => {
   const [pwNew2, setPwNew2] = useState("");
   const [formError, setFormError] = useState("");
 
-  // 미로그인 가드
+  // 미로그인 가드 (ProtectedRoute가 있더라도 방어적)
   useEffect(() => {
     if (!isAuth) navigate("/login");
   }, [isAuth, navigate]);
@@ -50,7 +57,7 @@ const MyPage = () => {
     }
   }, [user]);
 
-  // ✅ 백엔드 연동: /api/user/profile
+  // ✅ 백엔드 연동: /user/profile
   useEffect(() => {
     const fetchProfile = async () => {
       setLoading(true);
@@ -58,15 +65,13 @@ const MyPage = () => {
       try {
         const { data } = await api.get("/user/profile");
         // data: { name, email, interviews: [...] }
-        // 좌측 프로필은 서버 값이 있으면 갱신(사용자 수정값은 그대로 두고 싶으면 이 줄을 주석)
         setProfile((prev) => ({
           ...prev,
-          name: data.name || prev.name,
-          email: data.email || prev.email,
+          name: data?.name || prev.name,
+          email: data?.email || prev.email,
         }));
 
-        // 인터뷰 리스트 매핑 (테이블 렌더링용)
-        const mapped = (data.interviews || []).map((it) => ({
+        const mapped = (data?.interviews || []).map((it) => ({
           id: it.interview_no,
           title: it.interview_title,
           count: it.question_count,
@@ -78,18 +83,17 @@ const MyPage = () => {
         setInterviews(mapped);
       } catch (e) {
         console.error(e);
-        if (e?.response?.status === 401) {
-          // 토큰 만료 등: 로그인으로 보내기
-          navigate("/login");
-        } else {
+        // ❗️401은 axios 인터셉터에서 clearAuth + /login 처리됨
+        if (e?.response?.status !== 401) {
           setErr("프로필 정보를 불러오지 못했습니다.");
         }
       } finally {
         setLoading(false);
       }
     };
-    fetchProfile();
-  }, [navigate]);
+
+    if (isAuth) fetchProfile();
+  }, [isAuth]);
 
   const filtered = useMemo(
     () => interviews.filter((r) => r.kind === tab),
@@ -117,6 +121,7 @@ const MyPage = () => {
       if (!pwNew || pwNew.length < 8) return setFormError("새 비밀번호는 8자 이상이어야 합니다.");
       if (pwNew !== pwNew2) return setFormError("새 비밀번호가 일치하지 않습니다.");
       alert("비밀번호가 변경되었습니다. (데모)");
+      // 실제로는 api.post("/user/change-password", { current: pwCurrent, next: pwNew })
     }
 
     setProfile(editProfile);
@@ -124,10 +129,9 @@ const MyPage = () => {
     setIsEditOpen(false);
   };
 
+  // ✅ Context의 logout 대신 우리 훅 사용
   const handleLogout = () => {
-    try { localStorage.removeItem("token"); } catch {}
-    logout?.();
-    navigate("/");
+    doLogout(); // 내부에서 clearAuth + queryClient.clear + /login 이동
   };
 
   return (
@@ -184,7 +188,6 @@ const MyPage = () => {
                 <h3 className="text-sm font-medium text-gray-700">
                   실전 면접 분석 결과 <span className="text-blue-600">{filtered.length}</span>
                 </h3>
-                {/* 서버에서 날짜가 필요하면 따로 추가 */}
                 <p className="text-[11px] text-gray-400 mt-1">2025.08.23</p>
               </div>
 
@@ -356,7 +359,6 @@ function Badge({ children, tone = "gray" }) {
 function formatKST(isoLike) {
   try {
     const d = new Date(isoLike);
-    // 한국 시간대 보정
     const y = d.getFullYear();
     const m = pad(d.getMonth() + 1);
     const day = pad(d.getDate());
