@@ -1,16 +1,23 @@
 // src/pages/resume/ResumeUploadPage.jsx
 import React, { useState, useEffect } from "react";
+import axios from "axios"; // 업로드 전용 인스턴스
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
 import { useMutation } from "@tanstack/react-query";
-import api from "../../utils/api"; // ✅ 인터셉터 적용된 axios 인스턴스
 import { useAuthStore } from "../../stores/authStore";
 
 export default function ResumeUploadPage() {
   const nav = useNavigate();
-  // 굳이 사전 로그인 체크로 alert 띄우지 않음 (401은 인터셉터가 처리)
-  const token = useAuthStore((s) => s.token); // 필요하면 UI 분기 등에만 활용
+
+  // ===== 업로드 전용 axios (mock 미장착) =====
+  const uploadAxios = axios.create({
+    baseURL: "/api", // 프록시 사용 시 /api, 직접 호출이면 "http://localhost:8080"
+    withCredentials: false,
+    // timeout: 180000, // 필요하면 타임아웃 추가
+  });
+
+  const token = useAuthStore((s) => s.token); // ✅ Zustand에서 토큰 읽기
 
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
@@ -32,6 +39,7 @@ export default function ResumeUploadPage() {
     }
     setInterviewNo(no);
 
+    // 선택한 면접 유형 표시
     const typeStr = sessionStorage.getItem("interviewType");
     if (typeStr) {
       const t = Number(typeStr);
@@ -64,11 +72,14 @@ export default function ResumeUploadPage() {
 
   // ===== React Query: 업로드 요청 =====
   const uploadMutation = useMutation({
-    mutationFn: async (fd) => {
-      const url = `/resumes/upload/${encodeURIComponent(interviewNo)}`;
-      // ✅ Authorization/Content-Type/FormData 처리는 인터셉터가 자동 처리
-      const { data } = await api.post(url, fd);
-      return data; // { message: true } 기대
+    mutationFn: async ({ url, fd }) => {
+      const { data } = await uploadAxios.post(url, fd, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : undefined, // ✅ Zustand 토큰 사용
+          // Content-Type 지정 금지 (브라우저가 boundary 자동 부여)
+        },
+      });
+      return data;
     },
     onSuccess: (data) => {
       if (!data || data.message !== true) {
@@ -84,7 +95,6 @@ export default function ResumeUploadPage() {
         statusText: err?.response?.statusText,
         data: err?.response?.data,
       });
-      // 401은 인터셉터에서 clearAuth + /login 이동 처리됨
       alert(
         `업로드에 실패했습니다.\n` +
           (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
@@ -112,9 +122,6 @@ export default function ResumeUploadPage() {
 
     const fd = new FormData();
     fd.append("interviewTitle", title.trim());
-    // (선택) 서버에 면접 유형도 함께 보내고 싶다면 주석 해제
-    // const typeStr = sessionStorage.getItem("interviewType");
-    // if (typeStr) fd.append("interviewType", typeStr);
 
     if (mode === "file") {
       if (!(fileArg instanceof File)) {
@@ -139,7 +146,9 @@ export default function ResumeUploadPage() {
     }
 
     logFormData(fd);
-    uploadMutation.mutate(fd);
+
+    const url = `/resumes/upload/${encodeURIComponent(interviewNo)}`;
+    uploadMutation.mutate({ url, fd });
   }
 
   // 파일 선택 시: 로컬 변수 f를 즉시 업로드에 사용 (state 반영 기다리지 않음)
