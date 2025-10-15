@@ -1,11 +1,11 @@
 // src/pages/interview/Interview.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { useInterview } from "../../context/InterviewContext";
+import { useInterview } from "../../context/InterviewContext.jsx";
 import { useNavigate, useParams } from "react-router-dom";
 import axiosInstance from "../../utils/axiosInstance";
 import { formatSec } from "../../utils/helper";
 import Header from "../../components/Header";
-import Footer from "../../components/Footer";
+// import Footer from "../../components/Footer"; // 필요하면 사용
 
 // 버튼 유틸
 const btn = (variant = "default") => {
@@ -40,11 +40,11 @@ function mapFromSessionStorage() {
 }
 
 export default function Interview() {
-  // 컨텍스트 + 복구
   const { selected, currentIdx, setIdx, setSelected } = useInterview?.() ?? {};
   const nav = useNavigate();
   const { sessionId: routeId } = useParams();
 
+  // 컨텍스트 비어 있으면 세션스토리지에서 복구
   useEffect(() => {
     if (!selected || selected.length === 0) {
       const restored = mapFromSessionStorage();
@@ -100,7 +100,7 @@ export default function Interview() {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     if (mediaRef.current) {
       mediaRef.current.srcObject = stream;
-      try { await mediaRef.current.play(); } catch { }
+      try { await mediaRef.current.play(); } catch { /* ignore */ }
     }
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
@@ -125,81 +125,49 @@ export default function Interview() {
 
   // 업로드 → 즉시 이동(Optimistic), 마지막도 fire-and-forget
   async function uploadAndNext() {
-    if (!blob || !q) { L("warn", "Interview", "uploadAndNext blocked: no blob or no question"); return; }
-
-    L("info", "Interview", "uploadAndNext", {
-      interviewNoNum, questionId: q.questionId, currentIdx, total, blobSize: blob?.size
-    });
+    if (!blob || !q) return;
 
     if (!Number.isFinite(interviewNoNum)) {
       alert("면접 세션 번호(interviewNo)가 유효하지 않습니다. 처음부터 다시 진행해 주세요.");
-      L("error", "Interview", "invalid interviewNoNum", interviewNoNum);
       nav("/interview/select");
       return;
     }
     const questionNoNum = Number.parseInt(String(q.questionId).trim(), 10);
     if (!Number.isFinite(questionNoNum)) {
       alert("질문 번호가 유효하지 않습니다.");
-      L("error", "Interview", "invalid questionNoNum", q.questionId);
       return;
     }
 
-
     const url = `/interviews/${encodeURIComponent(interviewNoNum)}/${encodeURIComponent(questionNoNum)}/video`;
-    const isLast = (currentIdx ?? 0) === total - 1;
-
-    // 공통 FormData
     const fd = new FormData();
     fd.append("video", blob, "answer.webm");
 
     try {
       setUploading(true);
-      L("info", "Interview", "POST begin", { url, isLast });
-
-      // ✅ 모든 문항: 응답을 기다리지 않고 백그라운드 업로드
-      axiosInstance.post(url, fd, { timeout: 0 })
-        .then((res) => {
-          L("info", "Interview", "POST success (non-blocking)", { status: res?.status, data: res?.data });
-        })
-        .catch((e) => {
-          L("warn", "Interview", "POST error (non-blocking)", {
-            status: e?.response?.status, data: e?.response?.data, message: e?.message
-          });
-        });
-    } catch (e) {
-      L("error", "Interview", "POST exception", e);
+      // 응답을 기다리지 않고 업로드 시작 (실패해도 화면 전환은 진행)
+      axiosInstance.post(url, fd, { timeout: 0 }).catch(() => {});
+    } catch {
+      // 네트워크 예외만 사용자에게 안내
       alert("영상 업로드에 실패했습니다. 네트워크를 확인하고 다시 시도해 주세요.");
     } finally {
       setUploading(false);
-      L("info", "Interview", "POST finally");
     }
-
 
     // 다음 문항 또는 마이페이지로
     const next = (currentIdx ?? 0) + 1;
     if (next < total) {
       setBlob(null);
       setSec(0);
-      typeof setIdx === "function" ? setIdx(next) : null;
+      if (typeof setIdx === "function") setIdx(next);
     } else {
-      // ✅ 마지막: 즉시 마이페이지로 이동 + '분석중' 플래그 전달
       try {
         const key = "aiInterview.processing";
-        const payload = {
-          interviewNo: interviewNoNum,
-          status: "processing",
-          startedAt: Date.now(),
-        };
+        const payload = { interviewNo: interviewNoNum, status: "processing", startedAt: Date.now() };
         localStorage.setItem(key, JSON.stringify(payload));
-      } catch { }
-
-      nav("/mypage", {
-        state: { analyzing: true, interviewNo: interviewNoNum },
-        replace: true,
-      });
+      } catch {}
+      nav("/mypage", { state: { analyzing: true, interviewNo: interviewNoNum }, replace: true });
     }
   }
-
 
   // 재촬영
   function resetTake() {
@@ -208,9 +176,7 @@ export default function Interview() {
       recorderRef.current.stop();
     }
     const stream = mediaRef.current?.srcObject;
-    if (stream && typeof stream.getTracks === "function") {
-      stream.getTracks().forEach((t) => t.stop());
-    }
+    stream?.getTracks?.().forEach((t) => t.stop());
     if (mediaRef.current) {
       mediaRef.current.pause?.();
       mediaRef.current.srcObject = null;
@@ -256,15 +222,11 @@ export default function Interview() {
               <div className="inline-block rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700 mb-2">
                 Q{(currentIdx ?? 0) + 1}.
               </div>
-              <div className="text-[15px] font-medium text-slate-800">
-                {q.text}
-              </div>
+              <div className="text-[15px] font-medium text-slate-800">{q.text}</div>
             </div>
           ) : (
             <div className="rounded-2xl bg-white border border-amber-300 p-4 mb-4">
-              <div className="text-sm text-amber-700">
-                선택된 질문이 없어 면접을 시작할 수 없습니다.
-              </div>
+              <div className="text-sm text-amber-700">선택된 질문이 없어 면접을 시작할 수 없습니다.</div>
               <div className="mt-3">
                 <button className={btn("outline")} onClick={() => nav("/interview/questions")}>
                   질문 선택하러 가기
@@ -276,12 +238,7 @@ export default function Interview() {
           {/* 비디오 프레임 */}
           <div className="rounded-2xl bg-white border border-slate-200 p-4">
             <div className="relative w-full aspect-video rounded-xl bg-slate-100 overflow-hidden">
-              <video
-                ref={mediaRef}
-                className="w-full h-full object-cover"
-                muted
-                playsInline
-              />
+              <video ref={mediaRef} className="w-full h-full object-cover" muted playsInline />
               {rec && (
                 <div className="absolute inset-0 flex items-start justify-center pt-6">
                   <div className="flex items-center gap-2 text-rose-600 text-sm font-semibold">
@@ -325,7 +282,6 @@ export default function Interview() {
           </div>
         </div>
       </main>
-
     </div>
   );
 }
