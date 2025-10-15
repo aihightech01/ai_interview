@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import axios from "axios"; // 업로드 전용 인스턴스
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-import Footer from "../../components/Footer";
 import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "../../stores/authStore";
 
@@ -332,7 +331,7 @@ export default function ResumeUploadPage() {
           </div>
         </div>
       </main>
-      <Footer />
+
     </div>
   );
 }

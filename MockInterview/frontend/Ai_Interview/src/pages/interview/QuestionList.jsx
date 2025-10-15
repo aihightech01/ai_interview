@@ -482,7 +482,6 @@ export default function QuestionListPage() {
         </div>
       </main>
 
-      <Footer />
 
       {/* 전체 보기 모달 */}
       {previewText !== null && (

@@ -355,7 +355,6 @@ const Calibration = () => {
         </div>
       </main>
 
-      <Footer containerClass="max-w-6xl" />
     </div>
   );
 };

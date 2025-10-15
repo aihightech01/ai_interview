@@ -325,7 +325,7 @@ export default function Interview() {
           </div>
         </div>
       </main>
-      <Footer />
+
     </div>
   );
 }
