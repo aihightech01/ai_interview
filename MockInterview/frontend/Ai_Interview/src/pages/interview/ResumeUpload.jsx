@@ -1,27 +1,27 @@
 // src/pages/resume/ResumeUploadPage.jsx
 import React, { useState, useEffect } from "react";
-import axios from "axios"; // 👈 업로드 전용 인스턴스용
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
+import { useMutation } from "@tanstack/react-query";
+import api from "../../utils/api"; // ✅ 인터셉터 적용된 axios 인스턴스
+import { useAuthStore } from "../../stores/authStore";
 
 export default function ResumeUploadPage() {
   const nav = useNavigate();
-
-  // ===== 업로드 전용 axios (mock 미장착) =====
-  const uploadAxios = axios.create({
-    baseURL: "/api",              // 프록시 사용 시 /api, 직접 호출이면 "http://localhost:8080"
-    withCredentials: false,
-  });
+  // 굳이 사전 로그인 체크로 alert 띄우지 않음 (401은 인터셉터가 처리)
+  const token = useAuthStore((s) => s.token); // 필요하면 UI 분기 등에만 활용
 
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
-
   const [text, setText] = useState("");
-  const [file, setFile] = useState(null); // 선택 파일을 화면 표시용으로만 유지
-  const [loading, setLoading] = useState(false);
-
+  const [file, setFile] = useState(null); // 화면 표시용
   const [interviewNo, setInterviewNo] = useState("");
+
+  // UI용 면접 유형 표시
+  const [interviewType, setInterviewType] = useState(null);             // 1 | 2
+  const [interviewTypeLabel, setInterviewTypeLabel] = useState("");     // "실전 면접" | "모의 면접"
+  const [interviewTypeColor, setInterviewTypeColor] = useState("blue"); // "emerald" | "blue"
 
   useEffect(() => {
     const no = sessionStorage.getItem("interviewNo") || "";
@@ -31,6 +31,18 @@ export default function ResumeUploadPage() {
       return;
     }
     setInterviewNo(no);
+
+    const typeStr = sessionStorage.getItem("interviewType");
+    if (typeStr) {
+      const t = Number(typeStr);
+      setInterviewType(t);
+      setInterviewTypeLabel(
+        sessionStorage.getItem("interviewTypeLabel") || (t === 1 ? "실전 면접" : "모의 면접")
+      );
+      setInterviewTypeColor(
+        sessionStorage.getItem("interviewTypeColor") || (t === 1 ? "emerald" : "blue")
+      );
+    }
   }, [nav]);
 
   const titleEmpty = title.trim() === "";
@@ -50,6 +62,39 @@ export default function ResumeUploadPage() {
     console.log("[ResumeUpload] sending FormData:", entries);
   }
 
+  // ===== React Query: 업로드 요청 =====
+  const uploadMutation = useMutation({
+    mutationFn: async (fd) => {
+      const url = `/resumes/upload/${encodeURIComponent(interviewNo)}`;
+      // ✅ Authorization/Content-Type/FormData 처리는 인터셉터가 자동 처리
+      const { data } = await api.post(url, fd);
+      return data; // { message: true } 기대
+    },
+    onSuccess: (data) => {
+      if (!data || data.message !== true) {
+        console.error("[ResumeUpload] unexpected response:", data);
+        alert("업로드 응답이 올바르지 않습니다.");
+        return;
+      }
+      nav("/interview/questions");
+    },
+    onError: (err) => {
+      console.error("[ResumeUpload] upload error:", {
+        status: err?.response?.status,
+        statusText: err?.response?.statusText,
+        data: err?.response?.data,
+      });
+      // 401은 인터셉터에서 clearAuth + /login 이동 처리됨
+      alert(
+        `업로드에 실패했습니다.\n` +
+          (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
+          `콘솔 로그를 확인해주세요.`
+      );
+    },
+  });
+
+  const loading = uploadMutation.isPending;
+
   /**
    * 공통 업로드 함수
    * - mode: "file" | "text"
@@ -67,6 +112,9 @@ export default function ResumeUploadPage() {
 
     const fd = new FormData();
     fd.append("interviewTitle", title.trim());
+    // (선택) 서버에 면접 유형도 함께 보내고 싶다면 주석 해제
+    // const typeStr = sessionStorage.getItem("interviewType");
+    // if (typeStr) fd.append("interviewType", typeStr);
 
     if (mode === "file") {
       if (!(fileArg instanceof File)) {
@@ -91,43 +139,7 @@ export default function ResumeUploadPage() {
     }
 
     logFormData(fd);
-
-    const url = `/resumes/upload/${encodeURIComponent(interviewNo)}`;
-    const token =
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("token") ||
-      "";
-
-    try {
-      setLoading(true);
-
-      const { data } = await uploadAxios.post(url, fd, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : undefined,
-          // Content-Type 지정 금지: 브라우저가 boundary 자동 부여
-        },
-      });
-
-      if (!data || data.message !== true) {
-        console.error("[ResumeUpload] unexpected response:", data);
-        throw new Error("업로드 응답이 올바르지 않습니다.");
-      }
-      nav("/interview/questions");
-    } catch (err) {
-      console.error("[ResumeUpload] upload error:", {
-        url,
-        status: err?.response?.status,
-        statusText: err?.response?.statusText,
-        data: err?.response?.data,
-      });
-      alert(
-        `업로드에 실패했습니다.\n` +
-        (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
-        `콘솔 로그를 확인해주세요.`
-      );
-    } finally {
-      setLoading(false);
-    }
+    uploadMutation.mutate(fd);
   }
 
   // 파일 선택 시: 로컬 변수 f를 즉시 업로드에 사용 (state 반영 기다리지 않음)
@@ -160,11 +172,28 @@ export default function ResumeUploadPage() {
         <div className="max-w-[1200px] mx-auto px-4 py-10">
           <section className="bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
             <div className="p-6">
-              <h1 className="text-lg font-semibold mb-2">인터뷰 제목</h1>
+              {/* 제목 + 면접 유형 뱃지 같은 줄 */}
+              <div className="flex items-center justify-between">
+                <h1 className="text-lg font-semibold">인터뷰 제목</h1>
+
+                {interviewType && (
+                  <div className="flex items-center gap-2">
+                    <span className={chipCls(interviewTypeColor)}>{interviewTypeLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => nav("/interview/select")}
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      변경
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <input type="hidden" name="interviewNo" value={interviewNo} />
               <input
                 type="text"
-                className={`w-full max-w-[560px] h-10 px-3 rounded-lg border text-sm outline-none transition
+                className={`mt-3 w-full max-w-[560px] h-10 px-3 rounded-lg border text-sm outline-none transition
                 ${
                   titleTouched && titleEmpty
                     ? "border-red-500 ring-1 ring-red-200"
@@ -174,6 +203,7 @@ export default function ResumeUploadPage() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={() => setTitleTouched(true)}
+                disabled={loading}
               />
               {titleTouched && titleEmpty && (
                 <p className="mt-1 text-xs text-red-600">제목을 입력 해주세요</p>
@@ -220,6 +250,7 @@ export default function ResumeUploadPage() {
                     placeholder="자소서 텍스트 붙여넣기"
                     value={text}
                     onChange={(e) => setText(e.target.value)}
+                    disabled={loading}
                   />
                   <div className="mt-3">
                     <button
@@ -295,4 +326,15 @@ export default function ResumeUploadPage() {
       <Footer />
     </div>
   );
+}
+
+/* === helper: 칩 스타일 === */
+function chipCls(color = "blue") {
+  const map = {
+    emerald:
+      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border bg-emerald-50 text-emerald-700 border-emerald-200",
+    blue:
+      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200",
+  };
+  return map[color] || map.blue;
 }

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-import Footer from "../../components/Footer";
 import axiosInstance from "../../utils/axiosInstance";
 import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "../../stores/authStore";
@@ -24,6 +23,7 @@ export default function Select() {
 
   const startMutation = useMutation({
     mutationFn: async (interviewType) => {
+      // interviewType: 1(실전) | 2(모의)
       const { data } = await axiosInstance.post("/interviews/start", { interviewType });
       return data;
     },
@@ -32,6 +32,22 @@ export default function Select() {
       if (interviewNo == null) throw new Error("인터뷰 번호를 받지 못했습니다.");
       sessionStorage.setItem("interviewNo", String(interviewNo));
       sessionStorage.setItem("interviewType", String(interviewType));
+
+      // 보기 좋은 라벨/키/색 저장
+      const LABEL = interviewType === 1 ? "실전 면접" : "모의 면접";
+      const KEY   = interviewType === 1 ? "REAL"     : "MOCK";
+      const COLOR = interviewType === 1 ? "emerald"  : "blue";
+      sessionStorage.setItem("interviewTypeLabel", LABEL);
+      sessionStorage.setItem("interviewTypeKey", KEY);
+      sessionStorage.setItem("interviewTypeColor", COLOR);
+
+      // (옵션) 질문 유형 배열도 저장하고 싶다면 여기에 세팅
+      // 예: 실전면접은 기술/프로젝트/행동, 모의면접은 자유·행동 정도로 가정
+      const defaultTypes = interviewType === 1
+        ? ["TECHNICAL", "PROJECT", "BEHAVIORAL"]
+        : ["FREE", "BEHAVIORAL"];
+      sessionStorage.setItem("questionTypes", JSON.stringify(defaultTypes));
+
       nav("/interview/resume");
     },
     onError: (err) => {
@@ -72,7 +88,7 @@ export default function Select() {
             어떤 면접을 시작하시겠어요?
           </h1>
           <p className="mt-3 text-gray-600 text-[15px]">
-            실제 면접처럼 긴장감을 느끼고 싶다면 <b>실전 면접</b>을,  
+            실제 면접처럼 긴장감을 느끼고 싶다면 <b>실전 면접</b>을,&nbsp;
             편하게 연습하고 싶다면 <b>모의 면접</b>을 선택하세요.
           </p>
         </div>
@@ -135,8 +151,6 @@ export default function Select() {
           </div>
         </Card>
       </main>
-
-
     </div>
   );
 }
