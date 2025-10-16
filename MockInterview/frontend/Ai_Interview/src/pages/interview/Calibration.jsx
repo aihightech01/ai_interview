@@ -21,10 +21,11 @@ const FALLBACK_WEBM_VP8 = "video/webm; codecs=vp8";
 const FALLBACK_WEBM = "video/webm";
 
 const GUIDE = [
-  "얼굴을 중앙 원에 맞추고 눈높이를 카메라와 수평으로 맞추세요.",
+  "얼굴을 중앙에 맞추고 눈높이를 수평으로 맞추세요.",
   "답변할 때는 화면이 아닌 카메라 렌즈를 바라보세요.",
   "주변 소음을 줄이고 마이크를 너무 멀리 두지 마세요.",
   "정면의 부드러운 조명, 역광·복잡한 배경은 피하세요.",
+  "시작하기 버튼 클릭 후 3초 지난후 면접 버튼 활성화",
 ];
 
 const mimeToExt = (mime = "video/webm") => {
@@ -262,7 +263,7 @@ export default function Calibration() {
 
             {/* 오른쪽: 안내(위) + 시작(아래) 분리 */}
             <div className="col-span-12 lg:col-span-5">
-              <div className="h-full flex flex-col gap-8">
+              <div className="h-full flex flex-col gap-5">
                 {/* 안내 카드 — 좌측과 높이 맞추기 위해 flex-1 */}
                 <div className="flex-1 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   <h3 className="font-semibold mb-3">캘리브레이션 안내</h3>

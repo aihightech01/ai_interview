@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axiosInstance from "../../utils/axiosInstance";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-import Footer from "../../components/Footer";
+
 import { splitNumberedQuestions } from "../../utils/helper";
 import { useInterviewStore } from "../../stores/interviewStore"; // ✅ 제목은 스토어 우선
 
@@ -88,14 +88,14 @@ export default function QuestionListPage() {
         pieces.forEach((p) => {
           out.push({
             questionId: `${idBase}-${p.id}`,
-            text: p.text,
+            text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
             source, // COMMON/RESUME 등
           });
         });
       } else if (content.trim()) {
         out.push({
           questionId: String(idBase),
-          text: content,
+          text: content.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
           source,
         });
       }
@@ -133,7 +133,7 @@ export default function QuestionListPage() {
             const pieces = splitNumberedQuestions(raw);
             normalized = pieces.map((p) => ({
               questionId: `RES-${p.id}`,
-              text: p.text,
+              text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
               source: data?.source?.toUpperCase?.() || "RESUME",
             }));
           }
@@ -156,7 +156,7 @@ export default function QuestionListPage() {
               const pieces = splitNumberedQuestions(raw);
               const extra = pieces.map((p) => ({
                 questionId: `COM-${p.id}`,
-                text: p.text,
+                text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
                 source: "COMMON",
               }));
               normalized = [...extra, ...normalized];

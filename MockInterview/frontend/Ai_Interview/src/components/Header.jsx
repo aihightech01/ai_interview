@@ -2,7 +2,7 @@
 import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../stores/authStore";      // ✅ Zustand 스토어
-import { useLogout } from "../hooks/useAuth"; // ✅ React Query 훅(로그아웃용)
+import { useLogout } from "../hooks/useAuth";
 
 const Header = () => {
   const navigate = useNavigate();
