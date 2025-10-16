@@ -25,8 +25,8 @@ export default function SessionPreview() {
         const list = Array.isArray(data)
           ? data
           : Array.isArray(data?.clips)
-          ? data.clips
-          : [];
+            ? data.clips
+            : [];
 
         if (!abort) setClips(list ?? []);
       } catch (e) {
@@ -42,7 +42,13 @@ export default function SessionPreview() {
   }, [sessionId]);
 
   // 파일 경로가 D:\... 이면 직접 표시 불가 → 서버에서 URL 내려줄 때 사용
-  const toFileUrl = (p) => p;
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8080";
+
+const toFileUrl = (p) => {
+  if (!p) return "";
+  const file = String(p).split(/[\\/]/).pop(); // D:\... → a1b2c3.png 추출
+  return `${API_BASE}/media/${encodeURIComponent(file)}`;
+};
 
   // ✅ 카드 클릭 시 UI 라우트로 이동 (/session/:sessionId/:videoNo)
   const goDetail = (clip) => {
@@ -53,8 +59,16 @@ export default function SessionPreview() {
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex flex-col">
+      {/* 상단 바 */}
+      <header className=" top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-100">
+        <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
+          <button onClick={() => nav(-1)} className="px-3 py-1 rounded hover:bg-gray-100">← 뒤로</button>
+          <div className="text-sm text-gray-500">세션 #{sessionId} </div>
+        </div>
+      </header>
       <main className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+
           {/* 헤더 */}
           <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
             <h2 className="text-lg font-semibold text-gray-900">면접 분석 결과</h2>
@@ -99,14 +113,7 @@ export default function SessionPreview() {
                     title={c.videoNo ? "" : "videoNo가 없어 이동할 수 없습니다"}
                   >
                     <div className="h-32 bg-blue-50">
-                      {/* 서버가 HTTP 썸네일 URL을 내려주면 활성화
-                      {c.thumbnailDir && (
-                        <img
-                          src={toFileUrl(c.thumbnailDir)}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      )} */}
+                      <img src={toFileUrl(c.thumbnailDir)} alt="썸네일" />
                     </div>
                     <div className="p-4">
                       <p className="text-xs text-gray-400 mb-1">Q{c.questionNo}</p>
