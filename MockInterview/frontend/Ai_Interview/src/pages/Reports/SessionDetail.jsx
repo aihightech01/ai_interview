@@ -81,6 +81,7 @@ function toVisionChartData(visionRaw, fps = 30) {
     const headPitch = Number(d.head_pitch);
     let gazeYaw = Number(d.gaze_yaw);
     let gazePitch = Number(d.gaze_pitch);
+    let score = Number(d.score);
     // 값 크기로 라디안 추정(대략 |3| 미만이면 rad일 확률 ↑) → ° 변환
     if (Math.abs(gazeYaw) < 3 && Math.abs(gazePitch) < 3) {
       gazeYaw *= RAD2DEG;
@@ -91,6 +92,7 @@ function toVisionChartData(visionRaw, fps = 30) {
       tSec: frame / f,     // 초 단위 시간
       headYaw, headPitch,  // ° 가정
       gazeYaw, gazePitch,  // °로 통일
+      score,
     };
   });
 }
@@ -263,7 +265,7 @@ export default function SessionDetail() {
             ))}
           </div>
 
-          <div className="">
+          <div className="px-8 py-5">
             {/* 좌: 영상 */}
             {/* <div>
               <p className="text-xs text-gray-500 mb-2">실전 면접 영상</p>
@@ -271,7 +273,7 @@ export default function SessionDetail() {
             </div> */}
 
             {/* 우: 탭 컨텐츠 */}
-            <div className="min-w-0">
+            <div className="min-w-2">
               {/* 면접 집중도 (Vision) */}
               {tab === "면접 집중도" && (
                 <>

@@ -21,6 +21,7 @@ function normalizeVision(raw) {
     headPitch: Number(d.head_pitch),
     gazeYaw: Number(d.gaze_yaw),
     gazePitch: Number(d.gaze_pitch),
+    score: Number(d.score),
   }));
 }
 
@@ -59,6 +60,9 @@ export default function VisionLineChart({
           )}
           {series.includes("gazePitch") && (
             <Line type="monotone" dataKey="gazePitch" name="Gaze Pitch" dot={false} stroke="#ea580c" strokeWidth={1.5} />
+          )}
+          {series.includes("score") && (
+            <Line type="monotone" dataKey="score" name="score" dot={false} stroke="#eac90cff" strokeWidth={1.5} />
           )}
 
           {/* 하단 미니 뷰로 구간 확대/축소 */}
