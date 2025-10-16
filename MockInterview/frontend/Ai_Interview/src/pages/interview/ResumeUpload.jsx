@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import axios from "axios"; // 업로드 전용 인스턴스
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "../../stores/authStore";
 
 export default function ResumeUploadPage() {
@@ -23,6 +22,9 @@ export default function ResumeUploadPage() {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null); // 화면 표시용
   const [interviewNo, setInterviewNo] = useState("");
+
+  // 로딩 상태 (React Query 제거 → 로컬 관리)
+  const [loading, setLoading] = useState(false);
 
   // UI용 면접 유형 표시
   const [interviewType, setInterviewType] = useState(null);             // 1 | 2
@@ -69,43 +71,8 @@ export default function ResumeUploadPage() {
     console.log("[ResumeUpload] sending FormData:", entries);
   }
 
-  // ===== React Query: 업로드 요청 =====
-  const uploadMutation = useMutation({
-    mutationFn: async ({ url, fd }) => {
-      const { data } = await uploadAxios.post(url, fd, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : undefined, // ✅ Zustand 토큰 사용
-          // Content-Type 지정 금지 (브라우저가 boundary 자동 부여)
-        },
-      });
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data || data.message !== true) {
-        console.error("[ResumeUpload] unexpected response:", data);
-        alert("업로드 응답이 올바르지 않습니다.");
-        return;
-      }
-      nav("/interview/questions");
-    },
-    onError: (err) => {
-      console.error("[ResumeUpload] upload error:", {
-        status: err?.response?.status,
-        statusText: err?.response?.statusText,
-        data: err?.response?.data,
-      });
-      alert(
-        `업로드에 실패했습니다.\n` +
-          (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
-          `콘솔 로그를 확인해주세요.`
-      );
-    },
-  });
-
-  const loading = uploadMutation.isPending;
-
   /**
-   * 공통 업로드 함수
+   * 공통 업로드 함수 (axios + try/catch + 로컬 로딩)
    * - mode: "file" | "text"
    * - fileArg: File 객체 (파일 업로드 시 필수)
    * - textArg: string (텍스트 업로드 시 필수)
@@ -147,7 +114,40 @@ export default function ResumeUploadPage() {
     logFormData(fd);
 
     const url = `/resumes/upload/${encodeURIComponent(interviewNo)}`;
-    uploadMutation.mutate({ url, fd });
+
+    try {
+      setLoading(true);
+
+      const { data } = await uploadAxios.post(url, fd, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : undefined, // ✅ Zustand 토큰 사용
+          // Content-Type 지정 금지 (브라우저가 boundary 자동 부여)
+        },
+      });
+
+      // 응답 스키마 검증
+      if (!data || data.message !== true) {
+        console.error("[ResumeUpload] unexpected response:", data);
+        throw new Error("업로드 응답이 올바르지 않습니다.");
+      }
+
+      // 성공 시 이동
+      nav("/interview/questions");
+    } catch (err) {
+      console.error("[ResumeUpload] upload error:", {
+        url,
+        status: err?.response?.status,
+        statusText: err?.response?.statusText,
+        data: err?.response?.data,
+      });
+      alert(
+        `업로드에 실패했습니다.\n` +
+        (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
+        `콘솔 로그를 확인해주세요.`
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   // 파일 선택 시: 로컬 변수 f를 즉시 업로드에 사용 (state 반영 기다리지 않음)
@@ -331,7 +331,6 @@ export default function ResumeUploadPage() {
           </div>
         </div>
       </main>
-
     </div>
   );
 }

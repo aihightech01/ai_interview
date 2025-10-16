@@ -36,3 +36,33 @@ export function splitNumberedQuestions(raw) {
   }
   return items;
 }
+
+function cleanQuestionText(raw = "") {
+  const t = String(raw)
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/\r\n?/g, "\n")
+    .replace(/^\s*\d+\s*[.)-]\s*/, "") // 1. / 2) / 3- 제거
+    .trim();
+
+  // 구분선/빈 줄/숫자 토큰만 있는 줄 제거
+  if (
+    !t ||
+    /^[-–—•·\s]+$/.test(t) ||
+    /^-{2,}$/.test(t) ||
+    /^—{2,}$/.test(t) ||
+    /^\d+\s*[.)-]?$/.test(t)
+  ) {
+    return "";
+  }
+  return t;
+}
+
+// 백엔드가 숫자/소문자/다른 라벨을 주는 경우를 통일
+function mapSource(src) {
+  const s = String(src ?? "").toUpperCase();
+  if (s === "1" || s.includes("COMMON")) return "COMMON";
+  if (s === "2" || s.includes("RESUME") || s.includes("COVER")) return "RESUME";
+  if (s.includes("CUSTOM")) return "CUSTOM";
+  // 기본값은 COMMON
+  return "COMMON";
+}
