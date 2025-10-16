@@ -263,7 +263,7 @@ export default function SessionDetail() {
             ))}
           </div>
 
-          <div className="">
+          <div className="gap-4 p-5">
             {/* 좌: 영상 */}
             {/* <div>
               <p className="text-xs text-gray-500 mb-2">실전 면접 영상</p>
@@ -271,7 +271,7 @@ export default function SessionDetail() {
             </div> */}
 
             {/* 우: 탭 컨텐츠 */}
-            <div className="min-w-0">
+            <div className="min-w-0 gap-4 p-5">
               {/* 면접 집중도 (Vision) */}
               {tab === "면접 집중도" && (
                 <>
@@ -343,10 +343,7 @@ export default function SessionDetail() {
             </div>
 
             {/* 하단 권고/주의 */}
-            <div className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 p-4">
-              <p className="text-sm font-medium mb-1">권고사항</p>
-              <p className="text-sm">시선 이탈/좌우 흔들림 구간이 감지됩니다. 카메라를 눈높이에 맞추고, 문장 사이 호흡-멈춤(0.5~1s)을 넣어 안정감을 주세요.</p>
-            </div>
+
           </div>
         </section>
 
