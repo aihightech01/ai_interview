@@ -100,7 +100,7 @@ export default function EmotionOnlySynced({ emotionChartData = [], videoUrl = ""
             <ChartDraggable
               data={emotionChartData}
               // 감정 데이터는 x축이 t(초)라고 가정
-              // 컴포넌트가 dataKeyX를 지원한다면 다음 줄을 열어 의미가 더 명확해집니다:
+              // 만약 컴포넌트가 dataKeyX를 지원한다면 다음 줄을 열어주세요:
               // dataKeyX="t"
               duration={totalSec}
               cursorTime={cursorTime}
@@ -113,15 +113,13 @@ export default function EmotionOnlySynced({ emotionChartData = [], videoUrl = ""
           )}
         </div>
 
-        {/* ② 극성 슬라이더: 클릭 → setCursorTime + 시간 마커로 동기화 가시화 */}
+        {/* ② 극성 슬라이더: 클릭 → setCursorTime */}
         <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
           <EmotionHeatSlider
             data={emotionChartData}
             cursorTime={cursorTime}
             onChangeTime={setCursorTime}
             bins={7}
-            totalSec={totalSec}   // ← 시간 마커 계산용
-            // scrubMode="time"    // ← 옵션: 트랙 클릭을 '시간 점프'로 바꾸고 싶다면 활성화
           />
         </div>
 
@@ -160,7 +158,6 @@ export default function EmotionOnlySynced({ emotionChartData = [], videoUrl = ""
             cursorTime={cursorTime}
             mode={donutMode}
             height={220}
-            timeKey="t"     // ← 현재 시점 찾을 때 사용할 시간 키 명시 (감정 데이터는 t)
           />
         </div>
       </div>
