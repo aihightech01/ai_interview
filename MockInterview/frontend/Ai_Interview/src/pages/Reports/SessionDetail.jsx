@@ -5,6 +5,7 @@ import api from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
 import EmotionHeatSlider from "../../components/EmotionHeatSlider";
 import EmotionDonut from "../../components/EmotionDonut";
+import EmotionOnlySynced from "../../components/EmotionOnlySynced";
 
 import {
   ResponsiveContainer,
@@ -261,7 +262,7 @@ export default function SessionDetail() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
+          <div className="grid grid-cols-1 md:grid-cols-1 gap-4 p-5">
             {/* 좌: 영상 */}
             <div>
               <p className="text-xs text-gray-500 mb-2">실전 면접 영상</p>
@@ -324,70 +325,11 @@ export default function SessionDetail() {
 
               {tab === "표정(경면 변화)" && (
                 <>
-                  <p className="text-xs text-gray-500 mb-2">프레임별 감정 확률(%)</p>
-
-                  <div className="rounded-xl border border-gray-200 bg-white p-3 min-w-0">
-                    {emotionChartData.length ? (
-                      <ChartDraggable
-                        data={emotionChartData}
-                        duration={emotionChartData.at(-1)?.t || 0}
-                        cursorTime={cursorTime}
-                        onChangeTime={setCursorTime}  // ← 클릭/드래그 시 갱신
-                        series={["neutral", "happy", "sad", "angry", "fear", "disgust", "surprise"]}
-                        yDomain={[0, 100]}
-                      />
-                    ) : (
-                      <div className="text-xs text-gray-500">표시할 감정 데이터가 없습니다.</div>
-                    )}
-                  </div>
-
-                  {/* ② 감정 슬라이더 */}
-                  <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
-                    <EmotionHeatSlider
-                      data={emotionChartData}
-                      cursorTime={cursorTime}
-                      onChangeTime={setCursorTime}  // ← 클릭 시 갱신
-                      bins={7}
-                    />
-                  </div>
-
-                  {/* ③ 도넛 차트 */}
-                  <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-gray-500">
-                        감정 비율 ({donutMode === "avg" ? "전체 평균" : "현재 프레임"})
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setDonutMode("frame")}
-                          className={`h-7 px-3 rounded-md text-xs border ${donutMode === "frame"
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white text-slate-700 border-slate-300"
-                            }`}
-                        >
-                          현재 프레임
-                        </button>
-                        <button
-                          onClick={() => setDonutMode("avg")}
-                          className={`h-7 px-3 rounded-md text-xs border ${donutMode === "avg"
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "bg-white text-slate-700 border-slate-300"
-                            }`}
-                        >
-                          평균
-                        </button>
-                      </div>
-                    </div>
-
-                    <EmotionDonut
-                      data={emotionChartData}
-                      cursorTime={cursorTime}  // ← 실시간 동기화
-                      mode={donutMode}
-                      height={220}
-                    />
-
-                  </div>
-
+                  <EmotionOnlySynced
+                    emotionChartData={emotionChartData}
+                    videoUrl={videoUrl}          // 이미 계산하던 값
+                    poster={thumbUrl}            // 선택
+                  />
 
                   {/* Top label 분포(요약) */}
                   <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
