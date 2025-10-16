@@ -6,6 +6,7 @@ import { API_PATHS } from "../../utils/apiPaths";
 import EmotionHeatSlider from "../../components/EmotionHeatSlider";
 import EmotionDonut from "../../components/EmotionDonut";
 import EmotionOnlySynced from "../../components/EmotionOnlySynced";
+import FocusOnlySynced from "../../components/FocusOnlySynced";
 
 import {
   ResponsiveContainer,
@@ -262,63 +263,24 @@ export default function SessionDetail() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-1 gap-4 p-5">
+          <div className="">
             {/* 좌: 영상 */}
-            <div>
+            {/* <div>
               <p className="text-xs text-gray-500 mb-2">실전 면접 영상</p>
-              <div className="aspect-video overflow-hidden rounded-xl bg-black/90 text-white flex items-center justify-center">
-                {videoUrl ? (
-                  <video
-                    className="w-full h-full"
-                    controls
-                    preload="metadata"
-                    poster={thumbUrl || undefined}
-                    src={videoUrl}
-                  />
-                ) : (
-                  <span className="opacity-60 text-sm">영상 소스가 없습니다.</span>
-                )}
-              </div>
-            </div>
+
+            </div> */}
 
             {/* 우: 탭 컨텐츠 */}
             <div className="min-w-0">
               {/* 면접 집중도 (Vision) */}
               {tab === "면접 집중도" && (
                 <>
-                  <p className="text-xs text-gray-500 mb-2">프레임별 시선/머리 각도 변화</p>
-                  <div className="rounded-xl border border-gray-200 bg-white p-3">
-                    {visionChartData.length ? (
-                      <div className="w-full min-w-0">
-                        <ResponsiveContainer width="100%" height={300}>
-                          <LineChart data={visionChartData} margin={{ top: 10, right: 20, bottom: 10, left: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            {/* 프레임을 시간으로 보여주기 */}
-                            <XAxis
-                              dataKey="frame"
-                              tick={{ fontSize: 11 }}
-                              tickFormatter={(f) => formatTime(Number(f) / FPS)} // ★ FIX: FPS 사용 일관화
-                            />
-                            <YAxis tick={{ fontSize: 11 }} domain={["auto", "auto"]} />
-                            <Tooltip
-                              formatter={(v, name) => [`${Number(v).toFixed(2)}°`, name]}
-                              labelFormatter={(f) => `frame ${f} (${formatTime(Number(f) / FPS)})`} // ★ FIX
-                            />
-                            <Legend />
-                            <ReferenceLine y={0} stroke="#999" strokeDasharray="4 3" />
-                            <Line type="monotone" dataKey="headYaw" name="Head Yaw" dot={false} stroke="#2563eb" strokeWidth={2} />
-                            <Line type="monotone" dataKey="gazeYaw" name="Gaze Yaw" dot={false} stroke="#16a34a" strokeWidth={2} />
-                            <Line type="monotone" dataKey="headPitch" name="Head Pitch" dot={false} stroke="#7c3aed" strokeWidth={1.5} />
-                            <Line type="monotone" dataKey="gazePitch" name="Gaze Pitch" dot={false} stroke="#ea580c" strokeWidth={1.5} />
-                            <Brush dataKey="frame" height={16} travellerWidth={8} />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-gray-500">
-                        표시할 시선/머리각 데이터가 없습니다. (vision length: {Array.isArray(visionRaw) ? visionRaw.length : 0})
-                      </div>
-                    )}
+                  <div className="md:col-span-2">
+                    <FocusOnlySynced
+                      visionChartData={visionChartData}  // toVisionChartData로 tSec 포함 생성된 배열
+                      videoUrl={videoUrl}
+                      poster={thumbUrl}
+                    />
                   </div>
                 </>
               )}
