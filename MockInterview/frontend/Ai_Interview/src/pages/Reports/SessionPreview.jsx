@@ -42,13 +42,7 @@ export default function SessionPreview() {
   }, [sessionId]);
 
   // 파일 경로가 D:\... 이면 직접 표시 불가 → 서버에서 URL 내려줄 때 사용
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8080";
-
-const toFileUrl = (p) => {
-  if (!p) return "";
-  const file = String(p).split(/[\\/]/).pop(); // D:\... → a1b2c3.png 추출
-  return `${API_BASE}/media/${encodeURIComponent(file)}`;
-};
+  const toFileUrl = (p) => p;
 
   // ✅ 카드 클릭 시 UI 라우트로 이동 (/session/:sessionId/:videoNo)
   const goDetail = (clip) => {
@@ -113,7 +107,14 @@ const toFileUrl = (p) => {
                     title={c.videoNo ? "" : "videoNo가 없어 이동할 수 없습니다"}
                   >
                     <div className="h-32 bg-blue-50">
-                      <img src={toFileUrl(c.thumbnailDir)} alt="썸네일" />
+
+                      {c.thumbnailDir && (
+                        <img
+                          src={toFileUrl(c.thumbnailDir)}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      )} 
                     </div>
                     <div className="p-4">
                       <p className="text-xs text-gray-400 mb-1">Q{c.questionNo}</p>

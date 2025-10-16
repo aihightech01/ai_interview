@@ -1,8 +1,10 @@
 // src/pages/Reports/SessionDetail.jsx
-import React, { useEffect, useMemo, useState,  } from "react";
+import React, { useEffect, useMemo, useState, } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
+import EmotionHeatSlider from "../../components/EmotionHeatSlider";
+import EmotionDonut from "../../components/EmotionDonut";
 
 import {
   ResponsiveContainer,
@@ -16,8 +18,7 @@ import {
   ReferenceLine,
   Brush,
 } from "recharts";
-
-import ChartDraggable from "../../components/ChartDraggable";
+import ChartDraggable from "../../components/ChartDraggable copy";
 import { parseEmotion, toEmotionChartData } from "../../utils/transformEmotion";
 
 /** 공통: 안전 파싱 */
@@ -101,6 +102,8 @@ function formatTime(sec) {
   return `${String(mm).padStart(2, "0")}:${ss.padStart(4, "0")}`;
 }
 
+
+
 export default function SessionDetail() {
   const { state } = useLocation();
   const nav = useNavigate();
@@ -112,28 +115,28 @@ export default function SessionDetail() {
   const [tab, setTab] = useState("면접 집중도");
   const [cursorTime, setCursorTime] = useState(0);
 
-useEffect(() => {
-  let ignore = false;
+  useEffect(() => {
+    let ignore = false;
 
-  (async () => {
-    try {
-      setLoading(true);
-      setErr("");
-      const url = API_PATHS.USER.PROFILE_DETAIL(sessionId, videoNo);
-      const { data } = await api.get(url);
+    (async () => {
+      try {
+        setLoading(true);
+        setErr("");
+        const url = API_PATHS.USER.PROFILE_DETAIL(sessionId, videoNo);
+        const { data } = await api.get(url);
 
-      if (!ignore) {
-        setClip(prev => ({ ...(prev || {}), ...(data || {}) })); 
+        if (!ignore) {
+          setClip(prev => ({ ...(prev || {}), ...(data || {}) }));
+        }
+      } catch (e) {
+        if (!ignore) setErr("분석 데이터를 불러오지 못했습니다.");
+      } finally {
+        if (!ignore) setLoading(false);
       }
-    } catch (e) {
-      if (!ignore) setErr("분석 데이터를 불러오지 못했습니다.");
-    } finally {
-      if (!ignore) setLoading(false);
-    }
-  })();
+    })();
 
-  return () => { ignore = true; };
-}, [sessionId, videoNo]);
+    return () => { ignore = true; };
+  }, [sessionId, videoNo]);
 
 
   // 분석 파싱
@@ -162,6 +165,7 @@ useEffect(() => {
   const answer = useMemo(() => safeParseJSON(analysis?.answer, {}) || {}, [analysis]);
   const emotionChartData = useMemo(() => toEmotionChartData(emotions, 30), [emotions]);
   const emotionSummary = useMemo(() => summarizeTopLabels(emotions), [emotions]);
+  const [donutMode, setDonutMode] = useState("frame");
 
   // ★ FIX: score 안전 파싱
   const score = useMemo(() => {
@@ -318,17 +322,17 @@ useEffect(() => {
                 </>
               )}
 
-              {/* 표정(경면 변화) (Emotion) */}
               {tab === "표정(경면 변화)" && (
                 <>
                   <p className="text-xs text-gray-500 mb-2">프레임별 감정 확률(%)</p>
+
                   <div className="rounded-xl border border-gray-200 bg-white p-3 min-w-0">
                     {emotionChartData.length ? (
                       <ChartDraggable
                         data={emotionChartData}
                         duration={emotionChartData.at(-1)?.t || 0}
                         cursorTime={cursorTime}
-                        onChangeTime={setCursorTime}
+                        onChangeTime={setCursorTime}  // ← 클릭/드래그 시 갱신
                         series={["neutral", "happy", "sad", "angry", "fear", "disgust", "surprise"]}
                         yDomain={[0, 100]}
                       />
@@ -336,6 +340,54 @@ useEffect(() => {
                       <div className="text-xs text-gray-500">표시할 감정 데이터가 없습니다.</div>
                     )}
                   </div>
+
+                  {/* ② 감정 슬라이더 */}
+                  <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
+                    <EmotionHeatSlider
+                      data={emotionChartData}
+                      cursorTime={cursorTime}
+                      onChangeTime={setCursorTime}  // ← 클릭 시 갱신
+                      bins={7}
+                    />
+                  </div>
+
+                  {/* ③ 도넛 차트 */}
+                  <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-500">
+                        감정 비율 ({donutMode === "avg" ? "전체 평균" : "현재 프레임"})
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setDonutMode("frame")}
+                          className={`h-7 px-3 rounded-md text-xs border ${donutMode === "frame"
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-slate-700 border-slate-300"
+                            }`}
+                        >
+                          현재 프레임
+                        </button>
+                        <button
+                          onClick={() => setDonutMode("avg")}
+                          className={`h-7 px-3 rounded-md text-xs border ${donutMode === "avg"
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-white text-slate-700 border-slate-300"
+                            }`}
+                        >
+                          평균
+                        </button>
+                      </div>
+                    </div>
+
+                    <EmotionDonut
+                      data={emotionChartData}
+                      cursorTime={cursorTime}  // ← 실시간 동기화
+                      mode={donutMode}
+                      height={220}
+                    />
+
+                  </div>
+
 
                   {/* Top label 분포(요약) */}
                   <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
