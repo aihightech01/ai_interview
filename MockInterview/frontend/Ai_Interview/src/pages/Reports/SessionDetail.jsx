@@ -266,7 +266,7 @@ export default function SessionDetail() {
                     videoUrl={videoUrl}
                     poster={thumbUrl}
                   />
-                  <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
+                  {/* <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
                     {emotionSummary.total > 0 ? (
                       <ul className="list-disc pl-4 text-sm text-gray-700 space-y-1">
                         {Object.entries(emotionSummary.counts).map(([k, v]) => {
@@ -281,7 +281,7 @@ export default function SessionDetail() {
                     ) : (
                       <div className="text-xs text-gray-500">요약할 감정 레이블이 없습니다.</div>
                     )}
-                  </div>
+                  </div> */}
                 </>
               )}
 
