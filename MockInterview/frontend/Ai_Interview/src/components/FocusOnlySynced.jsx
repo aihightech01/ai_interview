@@ -290,7 +290,7 @@ export default function FocusOnlySynced({
 
       {/* 🗣️ STT — 아래 줄에서 두 칸 전체 폭 사용 */}
       <div className="min-w-0 md:col-span-2">
-        <p className="text-base text-gray-800 font-semibold mb-2 text-center">STT</p>
+        <p className="text-base text-gray-800 font-semibold mb-2 text-center"></p>
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           {/* 높이: 필요에 맞게 조정 (예: 고정 360px or 화면 비율에 맞게) */}
           <div className="p-3">
