@@ -21,7 +21,7 @@ const EMOJI_SRC = {
   happy:
     "/img/Microsoft-Fluentui-Emoji-3d-Grinning-Face-With-Smiling-Eyes-3d.512.png",
   sad:
-    "/img/Microsoft-Fluentui-Emoji-3d-Sad-But-Relieved-Face-3d.512.pngg",
+    "/img/Microsoft-Fluentui-Emoji-3d-Sad-But-Relieved-Face-3d.512.png",
   angry:
     "/img/Microsoft-Fluentui-Emoji-3d-Pouting-Face-3d.512.png",
   fear:
