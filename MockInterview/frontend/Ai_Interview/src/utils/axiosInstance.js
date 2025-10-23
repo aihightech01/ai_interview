@@ -80,7 +80,7 @@ api.interceptors.response.use(
         "color:#16a34a;font-weight:bold"
       );
       console.log("headers:", maskHeaders(res.config?.headers || {}));
-      console.log("data:", res.data);
+      console.log("data:", res.data.token);
       console.groupEnd();
     }
     return res;

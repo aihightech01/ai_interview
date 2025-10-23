@@ -111,7 +111,6 @@ const SignUp = () => {
               onClick={() => navigate("/")}
               className="inline-flex items-center justify-center gap-2 text-sky-600 hover:text-sky-700 transition font-semibold text-lg"
             >
-
               AI 면접 코치
             </button>
           </div>
