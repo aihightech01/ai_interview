@@ -35,11 +35,32 @@ function setProvisionalCount(interviewId, count) {
     const obj = getProvisionalCounts();
     obj[interviewId] = { count: Number(count) || 0, ts: Date.now() };
     localStorage.setItem(PROV_Q_KEY, JSON.stringify(obj));
+    // ✅ 같은 탭에서도 즉시 반영되도록 커스텀 이벤트 발행
+    window.dispatchEvent(
+      new CustomEvent("prov-q:update", {
+        detail: { interviewId: String(interviewId), count: obj[interviewId].count },
+      })
+    );
   } catch {}
 }
 function getProvisionalCountFor(interviewId) {
   const obj = getProvisionalCounts();
   return obj?.[interviewId]?.count ?? null;
+}
+
+/* ───── 면접 종류 정규화 ───── */
+const KIND = {
+  REAL: "실전 면접",
+  MOCK: "모의 면접",
+};
+function normalizeKind(v) {
+  const s = String(v ?? "").trim().toLowerCase().replace(/\s+/g, "");
+  if (["real", "live", "실전", "실전면접", "real_interview"].includes(s)) return KIND.REAL;
+  if (["mock", "practice", "연습", "모의", "모의면접", "mock_interview"].includes(s)) return KIND.MOCK;
+  if (s === "1" || s === "true") return KIND.REAL;
+  if (s === "0" || s === "false") return KIND.MOCK;
+  // 모르면 기본값
+  return KIND.REAL;
 }
 
 const MyPage = () => {
@@ -51,7 +72,7 @@ const MyPage = () => {
 
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState("실전 면접");
+  const [tab, setTab] = useState(KIND.REAL); // ✅ 초기 탭 상수로
   const [profile, setProfile] = useState({ name: "", email: "" });
 
   // 서버에서 받아온 인터뷰 리스트
@@ -91,6 +112,40 @@ const MyPage = () => {
     }
   }, [user]);
 
+  // ✅ 업로드 직후 같은 탭에서 임시 카운트가 즉시 반영되도록 + 다른 탭/창 동기화
+  useEffect(() => {
+    const onProvUpdate = (e) => {
+      const { interviewId, count } = e.detail || {};
+      if (!interviewId) return;
+      setInterviews((prev) =>
+        prev.map((r) =>
+          r.id === String(interviewId)
+            ? { ...r, count: Math.max(Number(count) || 0, Number(r.count) || 0) }
+            : r
+        )
+      );
+    };
+    window.addEventListener("prov-q:update", onProvUpdate);
+
+    const onStorage = (e) => {
+      if (e.key !== PROV_Q_KEY) return;
+      const latest = getProvisionalCounts();
+      setInterviews((prev) =>
+        prev.map((r) => {
+          const alt = latest[r.id]?.count ?? null;
+          // 서버가 0이고 임시값이 있으면 반영
+          return alt != null && (r.count ?? 0) === 0 ? { ...r, count: alt } : r;
+        })
+      );
+    };
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("prov-q:update", onProvUpdate);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
   // ✅ 백엔드 연동: /user/profile
   useEffect(() => {
     const fetchProfile = async () => {
@@ -117,11 +172,11 @@ const MyPage = () => {
           return {
             id: String(it.interview_no),
             title: it.interview_title,
-            count: finalCount,                   // 👈 서버 0이면 임시값으로 대체
-            date: formatKST(it.interview_date),  // 화면표기용(KST 문자열)
-            startedAt,                           // 계산용(숫자)
-            kind: it.interview_type,             // "실전 면접" | "모의 면접"
-            statusText: rawStatus,               // 원상태(표시 시점에 덮어씌움)
+            count: finalCount,                        // 👈 서버 0이면 임시값으로 대체
+            date: formatKST(it.interview_date),       // 화면표기용(KST 문자열)
+            startedAt,                                // 계산용(숫자)
+            kind: normalizeKind(it.interview_type),   // ✅ 다양한 서버값 → 고정 라벨
+            statusText: rawStatus,                    // 원상태(표시 시점에 덮어씌움)
             statusTone: rawStatus?.includes("중") ? "blue" : "green",
           };
         });
@@ -261,7 +316,7 @@ const MyPage = () => {
               </div>
 
               <div className="flex items-center gap-2 text-sm">
-                {["실전 면접", "모의 면접"].map((name) => (
+                {[KIND.REAL, KIND.MOCK].map((name) => (
                   <button
                     key={name}
                     onClick={() => setTab(name)}
@@ -299,7 +354,7 @@ const MyPage = () => {
                       <tr
                         key={item.id}
                         className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-                        onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
+                        onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item, kind: item.kind } })}
                       >
                         <Td>
                           <span className="text-blue-600 text-[11px] mr-2">{item.kind}</span>
