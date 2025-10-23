@@ -226,28 +226,39 @@ export default function SessionDetail() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 space-y-5">
+      <main className="flex-1 overflow-y-auto mx-auto max-w-6xl px-4 py-6 space-y-5">
         {/* 타이틀 */}
         <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
-          <h2 className="text-lg font-semibold">프리뷰 분석 결과</h2>
-          <p className="mt-1 text-sm text-gray-600">
-            문항 “{clip.questionContent ?? `Q${clip.questionNo}`}”에 대한 결과입니다.
-          </p>
-          <div className="mt-3 text-xs text-gray-500 flex flex-wrap items-center gap-2">
-            <span className="px-2 py-0.5 rounded-md bg-gray-100 border">
-              영상번호 #{_videoNo ?? "-"}
-            </span>
-            {score !== null && (
-              <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
-                답변 점수 {score}%
+          {/* 헤더 라인 */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {/* 왼쪽: 면접 질문 */}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {clip.questionContent ?? `Q${clip.questionNo}`}
+              </h2>
+              <p className="mt-0.5 text-sm text-gray-600">
+                면접 질문에 대한 분석 결과입니다.
+              </p>
+            </div>
+
+            {/* 오른쪽: 영상번호 / 답변점수 */}
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+              <span className="px-2 py-1 rounded-md bg-gray-100 border border-gray-200 text-gray-700">
+                영상번호 #{_videoNo ?? "-"}
               </span>
-            )}
+
+              {score !== null && (
+                <span className="px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100">
+                  답변 점수 {score}%
+                </span>
+              )}
+            </div>
           </div>
         </section>
 
         {/* 총평/포인트 */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm p-6 md:p-8">
+          <div className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm p-5 md:p-5">
             <h3 className="text-sm font-medium mb-2 text-gray-800">총평</h3>
 
             {score !== null ? (
@@ -466,11 +477,11 @@ export default function SessionDetail() {
           </div>
         </section>
 
-        {/* 원본 JSON (필요 시만 펼쳐보기 — 성능 저하 방지) */}
+        {/* 원본 JSON (필요 시만 펼쳐보기 — 성능 저하 방지)
         <details className="bg-gray-50 p-3 rounded border">
           <summary className="cursor-pointer text-sm">원본 JSON 보기</summary>
           <pre className="text-xs overflow-auto">{JSON.stringify(clip, null, 2)}</pre>
-        </details>
+        </details> */}
       </main>
     </div >
   );

@@ -409,7 +409,7 @@ export default function FocusOnlySynced({
               currentTime={isPlaying ? sttTime : cursorTime}
               segments={sttSegments}
               timeUnit={sttTimeUnit}
-              maxHeight="max-h-80"
+              maxHeight="max-h-60"
               tokenHighlight
               approxWhenNoTokens
               smoothScroll

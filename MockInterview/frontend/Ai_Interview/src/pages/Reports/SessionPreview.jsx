@@ -1,12 +1,66 @@
 // src/pages/Reports/SessionPreview.jsx
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom"; // ✅ useNavigate 추가
+import { useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
+import { API_PATHS } from "../../utils/apiPaths";
+
+/** 로컬 드라이브/파일 스킴 차단 + 슬래시 보정 */
+function toPath(p) {
+  if (!p) return "";
+  const s = String(p);
+  const lower = s.toLowerCase();
+  if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("blob:")) return s;
+  if (lower.startsWith("file:")) return "";
+  if (/[A-Za-z]:\\/.test(s)) return ""; // D:\... 같은 로컬 경로 차단
+  return s.startsWith("/") ? s : `/${s}`;
+}
+
+/** clip → 비디오 스트림 URL 생성 (SessionDetail 방식 그대로, 로깅 포함) */
+function getVideoUrlFromClip(c) {
+  const no = c?.videoNo ?? c?.videoNO ?? c?.videono ?? c?.VideoNo ?? null;
+
+  if (no != null && API_PATHS?.VIDEOS?.STREAM) {
+    const url = toPath(API_PATHS.VIDEOS.STREAM(no));
+    console.debug("🎬 [getVideoUrlFromClip] STREAM(no) 사용", { no, url });
+    return url;
+  }
+
+  if (c?.videoStreamUrl) {
+    const t = c.videoStreamUrl;
+    const resolved = t.includes("{videoNo}") ? t.replace("{videoNo}", String(no ?? "")) : t;
+    const url = toPath(resolved);
+    console.debug("🎬 [getVideoUrlFromClip] videoStreamUrl 템플릿 사용", { template: t, no, url });
+    return url;
+  }
+
+  const url = toPath(c?.videoUrl || c?.videoDir || c?.path || "");
+  console.debug("🎬 [getVideoUrlFromClip] 보조 필드 사용", { url });
+  return url;
+}
+
+/** clip → 포스터(썸네일) URL (로깅 포함) */
+function getPosterFromClip(c) {
+  const raw =
+    c?.thumbnailDir ??
+    c?.thumbnailUrl ??
+    c?.poster ??
+    "";
+
+  const url = toPath(raw) || "";
+  console.debug("🖼️ [getPosterFromClip]", {
+    raw_thumbnailDir: c?.thumbnailDir,
+    raw_thumbnailUrl: c?.thumbnailUrl,
+    raw_poster: c?.poster,
+    decided: url || "(empty)",
+    note: url ? "toPath 결과 사용" : "toPath로 필터되어 빈 문자열일 수 있음(로컬/파일 스킴 차단)"
+  });
+  return url;
+}
 
 export default function SessionPreview() {
-  const { sessionId } = useParams(); // URL의 :sessionId
-  const nav = useNavigate();          // ✅ 라우터 이동 훅
-  const [clips, setClips] = useState([]); // [{questionNo, videoNo, ...}]
+  const { sessionId } = useParams();
+  const nav = useNavigate();
+  const [clips, setClips] = useState([]); // [{..., posterUrl, videoUrl}]
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -18,21 +72,43 @@ export default function SessionPreview() {
         setLoading(true);
         setErr("");
 
-        // GET /user/profile/:sessionId
+        console.log("🔹 [SessionPreview] 요청:", `/user/profile/${sessionId}`);
         const { data } = await api.get(`/user/profile/${sessionId}`);
+        console.log("📦 [원본 data]:", data);
 
-        // data 형태 방어
         const list = Array.isArray(data)
           ? data
           : Array.isArray(data?.clips)
-            ? data.clips
-            : [];
+          ? data.clips
+          : [];
 
-        if (!abort) setClips(list ?? []);
+        console.log("📋 [clips 원본]:", list);
+
+        // poster/videoUrl 가공 + 로깅
+        const normalized = (list ?? []).map((c) => {
+          const posterUrl = getPosterFromClip(c);
+          const videoUrl = getVideoUrlFromClip(c);
+          return { ...c, posterUrl, videoUrl };
+        });
+
+        // 요약 테이블 출력 (id, videoNo, posterUrl, videoUrl)
+        try {
+          const table = normalized.map((c) => ({
+            id: c.id ?? c.clipId ?? c.videoNo ?? c.questionNo,
+            videoNo: c.videoNo,
+            posterUrl: c.posterUrl,
+            videoUrl: c.videoUrl,
+          }));
+          console.table(table);
+        } catch { /* 콘솔 테이블 실패 무시 */ }
+
+        if (!abort) setClips(normalized);
       } catch (e) {
+        console.error("❌ [에러]:", e);
         if (!abort) setErr("질문/영상 목록을 불러오지 못했습니다.");
       } finally {
         if (!abort) setLoading(false);
+        console.log("🏁 [요청 종료]");
       }
     })();
 
@@ -41,28 +117,52 @@ export default function SessionPreview() {
     };
   }, [sessionId]);
 
-  // 파일 경로가 D:\... 이면 직접 표시 불가 → 서버에서 URL 내려줄 때 사용
-  const toFileUrl = (p) => p;
+  // ✅ 썸네일 가용성 핑: 실제로 로드되는지 이미지로 확인 (초기 로드 후 1회)
+  useEffect(() => {
+    if (!clips?.length) return;
+    // 너무 많을 수 있으니 상위 12개만 핑
+    const targets = clips.slice(0, 12);
+    targets.forEach((c) => {
+      if (!c.posterUrl) {
+        console.warn("🟨 [핑 생략] posterUrl 비어있음", { videoNo: c.videoNo, clip: c });
+        return;
+      }
+      const img = new Image();
+      img.onload = () => console.log("✅ [썸네일 로드 OK]", c.posterUrl);
+      img.onerror = () => console.warn("❌ [썸네일 로드 FAIL]", c.posterUrl);
+      img.src = c.posterUrl;
+    });
+  }, [clips]);
 
-  // ✅ 카드 클릭 시 UI 라우트로 이동 (/session/:sessionId/:videoNo)
+  // ✅ 카드 클릭 → 상세로 poster/videoUrl 함께 전달
   const goDetail = (clip) => {
     if (!clip?.videoNo) return;
-    // 상세 페이지로 이동 + clip을 state로 넘겨 재요청 없이 렌더 가능
-    nav(`/session/${sessionId}/${clip.videoNo}`, { state: { clip } });
+    const stateClip = {
+      ...clip,
+      poster: clip.posterUrl || getPosterFromClip(clip) || undefined,
+      videoUrl: clip.videoUrl || getVideoUrlFromClip(clip) || undefined,
+    };
+    console.log("➡️ [goDetail] 이동 상태값:", stateClip);
+
+    nav(`/session/${sessionId}/${clip.videoNo}`, {
+      state: { clip: stateClip },
+    });
   };
 
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex flex-col">
       {/* 상단 바 */}
-      <header className=" top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-100">
+      <header className="top-0 z-10 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
-          <button onClick={() => nav(-1)} className="px-3 py-1 rounded hover:bg-gray-100">← 뒤로</button>
-          <div className="text-sm text-gray-500">세션 #{sessionId} </div>
+          <button onClick={() => nav(-1)} className="px-3 py-1 rounded hover:bg-gray-100">
+            ← 뒤로
+          </button>
+          <div className="text-sm text-gray-500">세션 #{sessionId}</div>
         </div>
       </header>
+
       <main className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
-
           {/* 헤더 */}
           <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
             <h2 className="text-lg font-semibold text-gray-900">면접 분석 결과</h2>
@@ -94,7 +194,9 @@ export default function SessionPreview() {
             ) : err ? (
               <div className="py-16 text-center text-sm text-red-500">{err}</div>
             ) : clips.length === 0 ? (
-              <div className="py-16 text-center text-sm text-gray-500">표시할 항목이 없습니다.</div>
+              <div className="py-16 text-center text-sm text-gray-500">
+                표시할 항목이 없습니다.
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {clips.map((c, idx) => (
@@ -107,14 +209,22 @@ export default function SessionPreview() {
                     title={c.videoNo ? "" : "videoNo가 없어 이동할 수 없습니다"}
                   >
                     <div className="h-32 bg-blue-50">
-
-                      {c.thumbnailDir && (
+                      {c.posterUrl ? (
                         <img
-                          src={toFileUrl(c.thumbnailDir)}
+                          src={c.posterUrl}
                           alt=""
                           className="w-full h-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          onError={() =>
+                            console.warn("⚠️ [이미지 onError] posterUrl:", c.posterUrl)
+                          }
                         />
-                      )} 
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                          썸네일 없음
+                        </div>
+                      )}
                     </div>
                     <div className="p-4">
                       <p className="text-xs text-gray-400 mb-1">Q{c.questionNo}</p>
