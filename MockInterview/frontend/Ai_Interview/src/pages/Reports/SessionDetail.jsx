@@ -294,7 +294,7 @@ export default function SessionDetail() {
         {/* 세부 분석: 탭 */}
         <section className="rounded-2xl bg-white border border-gray-200 shadow-sm">
           <div className="flex items-center gap-2 border-b border-gray-100 px-5 pt-4">
-            {["면접 집중도", "감정 변화", "답변 분석"].map((name) => (
+            {["면접 집중도", "표정(경면 변화)", "답변 분석"].map((name) => (
               <button
                 key={name}
                 onClick={() => setTab(name)}
@@ -324,14 +324,12 @@ export default function SessionDetail() {
                 </div>
               )}
 
-
-              {tab === "감정 변화" && (
+              {/* 표정(경면 변화): AES 단일 라인 + 상태바 + 히트 슬라이더 */}
+              {tab === "표정(경면 변화)" && (
                 <EmotionOnlySynced
                   emotionChartData={emotionChartData}
                   videoUrl={videoUrl}
                   poster={thumbUrl}
-                  sttSegments={sttSegments}
-                  sttTimeUnit="s"
                 />
               )}
 

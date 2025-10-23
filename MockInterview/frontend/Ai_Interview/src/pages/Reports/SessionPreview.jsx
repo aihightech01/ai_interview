@@ -79,8 +79,9 @@ export default function SessionPreview() {
         const list = Array.isArray(data)
           ? data
           : Array.isArray(data?.clips)
-            ? data.clips
-            : [];
+          ? data.clips
+          : [];
+
         // console.log("📋 [clips 원본]:", list);
 
         // poster/videoUrl 가공 + 로깅
@@ -170,20 +171,19 @@ export default function SessionPreview() {
 
           {/* 종평 + 포인트 (임시) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <section className="w-full md:col-span-2 col-span-full rounded-xl border border-gray-100 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-1.5 h-5 bg-indigo-500 rounded-full"></div>
-                <h3 className="text-sm font-semibold text-gray-900">총평</h3>
-              </div>
-
-              <p className="text-[15px] text-gray-700 leading-7 tracking-tight">
-                이전에는 영상과 음성의 전달이 다소 불안정해 메시지가 명확하게 전달되지 않았습니다.
-                그러나 현재 결과에서는 발화 속도와 표현의 일관성이 개선되어 전달력이 한층 높아졌습니다.
-                앞으로는 이러한 안정감을 바탕으로 감정 표현의 자연스러움을 보완해 나가면 좋겠습니다.
+            <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">종평</h3>
+              <p className="text-sm text-gray-600">
+                영상/음성의 전달력 개선이 필요합니다. 분석 리포트를 참고해 개선하세요.
+              </p>
+            </section>
+            <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">포인트</h3>
+              <p className="text-sm text-gray-600">
+                시선 흔들림/표정 변화/발화 속도에서 개선 포인트가 감지되었습니다.
               </p>
             </section>
           </div>
-
 
           {/* 질문 카드 리스트 */}
           <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
