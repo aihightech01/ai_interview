@@ -54,6 +54,7 @@ export default function FocusOnlySynced({
 
   // 차트 margin(플롯 내부 패딩) — Recharts와 동일 값 사용
   const MARGIN = { top: 20, right: 16, bottom: 22, left: 36 };
+  const CHART_MARGIN = { top: 60, right: 40, bottom: 5, left: 0 };
 
   const onLoadedMetadata = () => {
     const v = videoRef.current;
@@ -180,7 +181,7 @@ export default function FocusOnlySynced({
     const Memo = React.memo(function InnerChart({ data, domain }) {
       return (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 60, right: 40, bottom: 5, left: 0 }}>
+          <LineChart data={data} margin={ CHART_MARGIN}>
             <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
             <XAxis
               dataKey="tSec"
@@ -196,6 +197,7 @@ export default function FocusOnlySynced({
               tick={{ fontSize: 11, fill: "#9ca3af" }}
               axisLine={false}
               tickLine={false}
+              
             />
             <Tooltip
               formatter={(v) => [`${Number(v).toFixed(1)} 점`, "집중도"]}
