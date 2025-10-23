@@ -270,7 +270,7 @@ export default function SessionDetail() {
 
                 <div className="mt-6 flex flex-col md:flex-row md:items-start md:gap-8">
                   {/* 원형 점수 */}
-                  <div className="flex justify-center md:justify-start shrink-0">
+                  <div className="flex justify-center md:justify-start shrink-0 [&_svg]:overflow-visible">
                     <ScoreCircle score={score} id="score-grad-total" />
                   </div>
 

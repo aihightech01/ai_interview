@@ -21,7 +21,7 @@ function getVideoUrlFromClip(c) {
 
   if (no != null && API_PATHS?.VIDEOS?.STREAM) {
     const url = toPath(API_PATHS.VIDEOS.STREAM(no));
-    console.debug("🎬 [getVideoUrlFromClip] STREAM(no) 사용", { no, url });
+    //console.debug("🎬 [getVideoUrlFromClip] STREAM(no) 사용", { no, url });
     return url;
   }
 
@@ -29,12 +29,12 @@ function getVideoUrlFromClip(c) {
     const t = c.videoStreamUrl;
     const resolved = t.includes("{videoNo}") ? t.replace("{videoNo}", String(no ?? "")) : t;
     const url = toPath(resolved);
-    console.debug("🎬 [getVideoUrlFromClip] videoStreamUrl 템플릿 사용", { template: t, no, url });
+    // console.debug("🎬 [getVideoUrlFromClip] videoStreamUrl 템플릿 사용", { template: t, no, url });
     return url;
   }
 
   const url = toPath(c?.videoUrl || c?.videoDir || c?.path || "");
-  console.debug("🎬 [getVideoUrlFromClip] 보조 필드 사용", { url });
+  // console.debug("🎬 [getVideoUrlFromClip] 보조 필드 사용", { url });
   return url;
 }
 
@@ -72,9 +72,9 @@ export default function SessionPreview() {
         setLoading(true);
         setErr("");
 
-        console.log("🔹 [SessionPreview] 요청:", `/user/profile/${sessionId}`);
+        // console.log("🔹 [SessionPreview] 요청:", `/user/profile/${sessionId}`);
         const { data } = await api.get(`/user/profile/${sessionId}`);
-        console.log("📦 [원본 data]:", data);
+        // console.log("📦 [원본 data]:", data);
 
         const list = Array.isArray(data)
           ? data
@@ -82,7 +82,7 @@ export default function SessionPreview() {
           ? data.clips
           : [];
 
-        console.log("📋 [clips 원본]:", list);
+        // console.log("📋 [clips 원본]:", list);
 
         // poster/videoUrl 가공 + 로깅
         const normalized = (list ?? []).map((c) => {
@@ -108,7 +108,7 @@ export default function SessionPreview() {
         if (!abort) setErr("질문/영상 목록을 불러오지 못했습니다.");
       } finally {
         if (!abort) setLoading(false);
-        console.log("🏁 [요청 종료]");
+        // console.log("🏁 [요청 종료]");
       }
     })();
 
@@ -222,7 +222,7 @@ export default function SessionPreview() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                          썸네일 없음
+                          구현예정
                         </div>
                       )}
                     </div>

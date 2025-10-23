@@ -5,8 +5,42 @@ import api from "../../utils/axiosInstance";           // axios 인스턴스 (40
 import { useAuthStore } from "../../stores/authStore";
 import { useLogout } from "../../hooks/useAuth"; 
 
-
 const STORAGE_KEY = "ai-coach-profile";
+
+/* ───── 업로드 직후 임시 질문 개수 저장소 (localStorage) ───── */
+const PROV_Q_KEY = "ai-coach:provisional-question-counts";
+const PROV_TTL_MS = 6 * 60 * 60 * 1000; // 6시간 후 자동 무시
+
+function getProvisionalCounts() {
+  try {
+    const raw = localStorage.getItem(PROV_Q_KEY);
+    const obj = raw ? JSON.parse(raw) : {};
+    // TTL 정리
+    const now = Date.now();
+    let changed = false;
+    for (const k of Object.keys(obj)) {
+      if (!obj[k]?.ts || now - obj[k].ts > PROV_TTL_MS) {
+        delete obj[k];
+        changed = true;
+      }
+    }
+    if (changed) localStorage.setItem(PROV_Q_KEY, JSON.stringify(obj));
+    return obj;
+  } catch {
+    return {};
+  }
+}
+function setProvisionalCount(interviewId, count) {
+  try {
+    const obj = getProvisionalCounts();
+    obj[interviewId] = { count: Number(count) || 0, ts: Date.now() };
+    localStorage.setItem(PROV_Q_KEY, JSON.stringify(obj));
+  } catch {}
+}
+function getProvisionalCountFor(interviewId) {
+  const obj = getProvisionalCounts();
+  return obj?.[interviewId]?.count ?? null;
+}
 
 const MyPage = () => {
   // ✅ AuthContext 제거 → Zustand로 대체
@@ -71,15 +105,26 @@ const MyPage = () => {
           email: data?.email || prev.email,
         }));
 
-        const mapped = (data?.interviews || []).map((it) => ({
-          id: it.interview_no,
-          title: it.interview_title,
-          count: it.question_count,
-          date: formatKST(it.interview_date),
-          kind: it.interview_type,              // "실전 면접" | "모의 면접"
-          statusText: it.analysis_status,       // "현재 분석 중" | "분석 완료"
-          statusTone: it.analysis_status?.includes("중") ? "blue" : "green",
-        }));
+        const mapped = (data?.interviews || []).map((it) => {
+          const startedAt = Date.parse(it.interview_date); // 숫자(밀리초) 저장
+          const rawStatus = it.analysis_status || "";
+
+          // ⚡️ 업로드 직후 임시 질문 개수(프론트 낙관적) 병합
+          const provCount = getProvisionalCountFor(String(it.interview_no));
+          const questionCount = (it.question_count ?? 0);
+          const finalCount = questionCount > 0 ? questionCount : (provCount ?? 0);
+
+          return {
+            id: String(it.interview_no),
+            title: it.interview_title,
+            count: finalCount,                   // 👈 서버 0이면 임시값으로 대체
+            date: formatKST(it.interview_date),  // 화면표기용(KST 문자열)
+            startedAt,                           // 계산용(숫자)
+            kind: it.interview_type,             // "실전 면접" | "모의 면접"
+            statusText: rawStatus,               // 원상태(표시 시점에 덮어씌움)
+            statusTone: rawStatus?.includes("중") ? "blue" : "green",
+          };
+        });
         setInterviews(mapped);
       } catch (e) {
         console.error(e);
@@ -95,10 +140,29 @@ const MyPage = () => {
     if (isAuth) fetchProfile();
   }, [isAuth]);
 
-  const filtered = useMemo(
-    () => interviews.filter((r) => r.kind === tab),
+  // ✅ 현재 탭(실전/모의) 안에 질문 개수 0개 항목이 존재하는지 (안내문구 표시용)
+  const hasZeroCount = useMemo(
+    () => interviews.some((r) => r.kind === tab && (r.count ?? 0) === 0),
     [interviews, tab]
   );
+
+  // ✅ 프론트에서 1시간 초과시 "분석 완료"로 강제 표기 + 질문 0개는 숨김
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+
+    return interviews
+      .map((r) => {
+        const start = Number.isFinite(r.startedAt) ? r.startedAt : Date.parse(r.date);
+        const over1h = Number.isFinite(start) && (now - start) > ONE_HOUR;
+
+        if (r.statusText === "현재 분석 중" && over1h) {
+          return { ...r, statusText: "분석 완료", statusTone: "green" }; // 화면 표기만 변경
+        }
+        return r;
+      })
+      .filter((r) => r.kind === tab && (r.count ?? 0) > 0); // 질문 개수 0개는 표시하지 않음
+  }, [interviews, tab]);
 
   const openEdit = () => {
     setEditProfile(profile);
@@ -186,9 +250,14 @@ const MyPage = () => {
             <div className="flex items-end justify-between">
               <div>
                 <h3 className="text-sm font-medium text-gray-700">
-                  실전 면접 분석 결과 <span className="text-blue-600">{filtered.length}</span>
+                  {tab} 분석 결과 <span className="text-blue-600">{filtered.length}</span>
                 </h3>
-                <p className="text-[11px] text-gray-400 mt-1">2025.08.23</p>
+                {/* ✅ 안내 문구: 현재 탭에 질문 0개 항목이 존재하면 표시 */}
+                {hasZeroCount && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    ※ 질문 개수가 없는 면접은 표시되지 않습니다.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2 text-sm">

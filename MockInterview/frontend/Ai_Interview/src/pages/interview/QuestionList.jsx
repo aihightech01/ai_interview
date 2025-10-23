@@ -20,6 +20,49 @@ function safeTruncate(str = "", max = SUMMARY_MAX_CHARS) {
   return flat.slice(0, max).trimEnd() + "…";
 }
 
+/* === NEW 뱃지/정렬용 표시 헬퍼들 (표시만 바뀜) === */
+const NEW_WINDOW_MS = 1000 * 60 * 60 * 24; // 24h
+
+// questionId 안의 10~13자리 숫자(초/밀리초 epoch 추정)를 뽑음
+function extractEpochLike(id = "") {
+  const digits = String(id).match(/\d{10,13}/g);
+  if (!digits) return null;
+  const n = Number(digits[0]);
+  if (!Number.isFinite(n)) return null;
+  // 13자리면 ms, 10자리면 sec 로 판단
+  return n > 1e12 ? n : n * 1000;
+}
+
+// 표시용 생성시각 추정: createdAt > questionId에서 epoch-like > null
+function guessCreatedAt(q) {
+  if (q?.createdAt) {
+    const t = +new Date(q.createdAt);
+    if (Number.isFinite(t)) return t;
+  }
+  const fromId = extractEpochLike(q?.questionId);
+  if (fromId) return fromId;
+  return null;
+}
+
+function isNewByTime(t) {
+  if (!Number.isFinite(t)) return false;
+  const now = Date.now();
+  return now - t <= NEW_WINDOW_MS;
+}
+
+// 칩(뱃지) 공통 스타일
+function pillCls(color = "gray") {
+  const base =
+    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border align-middle";
+  const map = {
+    blue: `${base} border-blue-200 bg-blue-50 text-blue-700`,
+    emerald: `${base} border-emerald-200 bg-emerald-50 text-emerald-700`,
+    gray: `${base} border-gray-200 bg-gray-50 text-gray-600`,
+    red: `${base} border-red-200 bg-red-50 text-red-700`,
+  };
+  return map[color] || map.gray;
+}
+
 export default function QuestionListPage() {
   const nav = useNavigate();
 
@@ -34,7 +77,7 @@ export default function QuestionListPage() {
   const [interviewTypeColor, setInterviewTypeColor] = useState("blue"); // "emerald" | "blue"
 
   // 전체 질문(탭 필터용)
-  const [allQuestions, setAllQuestions] = useState([]); // [{questionId,text,source}]
+  const [allQuestions, setAllQuestions] = useState([]); // [{questionId,text,source,createdAt?}]
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
@@ -90,6 +133,7 @@ export default function QuestionListPage() {
             questionId: `${idBase}-${p.id}`,
             text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
             source, // COMMON/RESUME 등
+            createdAt: d?.createdAt ?? null, // 있으면 유지
           });
         });
       } else if (content.trim()) {
@@ -97,6 +141,7 @@ export default function QuestionListPage() {
           questionId: String(idBase),
           text: content.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
           source,
+          createdAt: d?.createdAt ?? null,
         });
       }
     });
@@ -135,6 +180,7 @@ export default function QuestionListPage() {
               questionId: `RES-${p.id}`,
               text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
               source: data?.source?.toUpperCase?.() || "RESUME",
+              createdAt: null,
             }));
           }
         }
@@ -158,6 +204,7 @@ export default function QuestionListPage() {
                 questionId: `COM-${p.id}`,
                 text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
                 source: "COMMON",
+                createdAt: null,
               }));
               normalized = [...extra, ...normalized];
             }
@@ -189,11 +236,23 @@ export default function QuestionListPage() {
     };
   }, []);
 
-  // 현재 탭 리스트
-  const currentList = useMemo(
-    () => allQuestions.filter((q) => q.source === tab),
-    [allQuestions, tab]
-  );
+  /* === 현재 탭 리스트(표시용 최신순 정렬) ===
+     createdAt(있으면 우선) 또는 questionId의 epoch-like 숫자를 사용해 최신 → 오래된 순으로만 '표시용' 정렬.
+     타임스탬프가 전혀 없으면 기존 상대 순서를 유지(안정 정렬). */
+  const currentList = useMemo(() => {
+    const list = allQuestions.filter((q) => q.source === tab);
+    const indexMap = new Map();
+    list.forEach((q, i) => indexMap.set(q.questionId, i));
+
+    return [...list].sort((a, b) => {
+      const ta = guessCreatedAt(a);
+      const tb = guessCreatedAt(b);
+      if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta; // 최근 우선
+      if (Number.isFinite(ta)) return -1; // 타임스탬프 있는 쪽을 위로
+      if (Number.isFinite(tb)) return 1;
+      return (indexMap.get(a.questionId) ?? 0) - (indexMap.get(b.questionId) ?? 0);
+    });
+  }, [allQuestions, tab]);
 
   // 선택 토글 (최대 3개)
   function toggleChoice(q) {
@@ -217,10 +276,12 @@ export default function QuestionListPage() {
       if (!data?.success) throw new Error("커스텀 질문 등록 실패");
 
       const baseId = String(data?.question_no ?? Date.now());
+      const createdAtNow = Date.now();
       const created = toAdd.map((p) => ({
         questionId: `${baseId}-${p.id}`,
         text: p.text,
         source: "CUSTOM",
+        createdAt: createdAtNow, // 커스텀은 표시용 시간 명확히
       }));
 
       setAllQuestions((prev) => [...created, ...prev]);
@@ -268,7 +329,9 @@ export default function QuestionListPage() {
   // 리스트 패널 (그레이 테두리 & 모던)
   const ListPanel = (
     <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
-      <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
+      <div className="px-6 pt-5 pb-2 text-xs text-gray-500">
+        선택 가능: 최대 3개
+      </div>
       <div className="px-6 pb-6">
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <ul className="divide-y divide-gray-100">
@@ -283,6 +346,16 @@ export default function QuestionListPage() {
             )}
             {currentList.map((q) => {
               const checked = selected.some((x) => x.questionId === q.questionId);
+
+              // 표시용 메타
+              const createdAt = guessCreatedAt(q);
+              const isNew = isNewByTime(createdAt); // 최근 24h 이내면 NEW
+              const sourceLabel =
+                q.source === "COMMON" ? "공통"
+                : q.source === "RESUME" ? "자소서"
+                : q.source === "CUSTOM" ? "커스텀"
+                : q.source;
+
               return (
                 <li
                   key={`${q.source}-${q.questionId}`}
@@ -298,9 +371,30 @@ export default function QuestionListPage() {
                     onClick={(e) => e.stopPropagation()}
                     className="mt-1 h-4 w-4 accent-[#3B82F6]"
                   />
-                  <p className="text-sm text-gray-800 whitespace-pre-line break-words">
-                    {q.text}
-                  </p>
+
+                  <div className="flex-1 min-w-0">
+                    {/* 첫 줄: 질문 본문 + 태그들 */}
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm text-gray-800 whitespace-pre-line break-words">
+                        {q.text}
+                      </p>
+
+                      {/* 우측 태그 뱃지 영역 */}
+                      <div className="shrink-0 flex items-center gap-2">
+                        {/* 소스 태그 */}
+                        <span className={pillCls("gray")}>{sourceLabel}</span>
+                        {/* NEW 태그 (최근인 경우만) */}
+                        {isNew && <span className={pillCls("blue")}>NEW</span>}
+                      </div>
+                    </div>
+
+                    {/* 둘째 줄: 생성시각 힌트(있으면) */}
+                    {Number.isFinite(createdAt) && (
+                      <div className="mt-1 text-[11px] text-gray-400">
+                        {new Date(createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -356,6 +450,9 @@ export default function QuestionListPage() {
             )}
             {customList.map((q) => {
               const checked = selected.some((x) => x.questionId === q.questionId);
+              const createdAt = guessCreatedAt(q);
+              const isNew = isNewByTime(createdAt);
+
               return (
                 <li key={`custom-${q.questionId}`} className="p-4 flex items-start gap-3">
                   <input
@@ -364,7 +461,20 @@ export default function QuestionListPage() {
                     onChange={() => toggleChoice(q)}
                     className="mt-1 h-4 w-4 accent-[#3B82F6]"
                   />
-                  <p className="flex-1 text-sm text-gray-800 break-words">{q.text}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-gray-800 break-words">{q.text}</p>
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className={pillCls("gray")}>커스텀</span>
+                        {isNew && <span className={pillCls("blue")}>NEW</span>}
+                      </div>
+                    </div>
+                    {Number.isFinite(createdAt) && (
+                      <div className="mt-1 text-[11px] text-gray-400">
+                        {new Date(createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => removeCustomLocal(q)}
                     className="px-3 h-8 text-xs rounded bg-white border border-gray-200 hover:bg-gray-50"
@@ -481,7 +591,6 @@ export default function QuestionListPage() {
           </div>
         </div>
       </main>
-
 
       {/* 전체 보기 모달 */}
       {previewText !== null && (
