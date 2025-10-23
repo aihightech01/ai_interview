@@ -97,9 +97,9 @@ function CopyButton({ text, className = "" }) {
           await navigator.clipboard.writeText(text || "");
           setCopied(true);
           setTimeout(() => setCopied(false), 1200);
-        } catch {}
+        } catch { }
       }}
-      className={`h-8 px-3 rounded-md border text-xs hover:bg-gray-50 ${className}`}
+      className={`h-8 px-3 rounded-md text-xs hover:bg-gray-50 ${className}`}
       title="복사"
       type="button"
     >
@@ -252,11 +252,10 @@ export default function SessionDetail() {
               <button
                 key={name}
                 onClick={() => setTab(name)}
-                className={`text-sm px-3 py-2 rounded-t-lg border-b-2 ${
-                  tab === name
-                    ? "border-blue-600 text-blue-700"
-                    : "border-transparent text-gray-600 hover:text-gray-800"
-                }`}
+                className={`text-sm px-3 py-2 rounded-t-lg border-b-2 ${tab === name
+                  ? "border-blue-600 text-blue-700"
+                  : "border-transparent text-gray-600 hover:text-gray-800"
+                  }`}
               >
                 {name}
               </button>
@@ -303,23 +302,73 @@ export default function SessionDetail() {
                   {/* 개선 답변 카드 */}
                   <div className="rounded-lg border border-gray-100">
                     <details open className="group">
-                      <summary className="list-none cursor-pointer select-none flex items-center justify-between px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[12px] font-medium text-gray-800">개선 답변</p>
-                          <Pill>초안</Pill>
-                        </div>
-                        <svg
-                          className="size-4 text-gray-400 transition-transform group-open:rotate-180"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
-                            clipRule="evenodd"
+                      <summary
+                        className="
+        group/list list-none cursor-pointer select-none
+        flex items-center justify-between gap-3
+        rounded-[10px] bg-white/70 backdrop-blur-[6px]
+        px-5 py-3
+        transition-all duration-300
+        hover:bg-white/85
+        focus:outline-none
+        focus-visible:ring-2 focus-visible:ring-indigo-500/40
+        dark:bg-slate-800/60 dark:hover:bg-slate-800/80 dark:from-slate-700
+      "
+                      >
+                        {/* 왼쪽: 액센트 + 타이틀 */}
+                        <div className="flex items-center gap-3">
+                          {/* accent dot */}
+                          <span
+                            className="
+            relative inline-flex items-center justify-center
+            w-2.5 h-2.5 rounded-full
+            bg-indigo-500/70 ring-2 ring-indigo-200/60
+            transition-all duration-300
+            group-open:w-3 group-open:h-3
+            group-open:bg-indigo-500 group-open:ring-indigo-300
+          "
+                            aria-hidden
                           />
-                        </svg>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[14px] font-semibold tracking-tight text-slate-800 dark:text-slate-100">
+                              개선된 답변 버전
+                            </span>
+                            <span
+                              className="
+              inline-flex items-center gap-1
+              px-2 py-0.5 rounded-full text-[11px] font-medium
+              text-indigo-700 bg-indigo-50 ring-1 ring-indigo-100
+              transition-colors
+              group-open:bg-indigo-100 group-open:text-indigo-800
+              dark:text-indigo-200 dark:bg-indigo-900/30 dark:ring-indigo-800
+            "
+                            >
+                              AI 개선본
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 오른쪽: 소프트 아이콘 버튼 */}
+                        <span
+                          className="
+          inline-flex items-center justify-center
+          w-7 h-7 rounded-md
+          ring-1 ring-slate-200/80 bg-white/60
+          transition-all duration-300
+          group-hover:shadow-[0_2px_10px_-2px_rgba(0,0,0,0.10)]
+          dark:bg-slate-900/40 dark:ring-slate-700
+        "
+                          aria-hidden
+                        >
+                          <svg
+                            className="w-4 h-4 text-slate-500 transition-transform duration-300 group-open:rotate-180"
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </span>
                       </summary>
+
 
                       <div className="px-4 pb-4 pt-1">
                         <div className="rounded-md bg-gray-50/80 p-3 text-[13px] leading-relaxed text-gray-800 whitespace-pre-line">
@@ -334,38 +383,60 @@ export default function SessionDetail() {
 
                   {/* Positive / Negative */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                    {/* Positive */}
+                    <div className="group rounded-xl border border-emerald-200/70 bg-emerald-50/60 p-4
+                  ring-1 ring-transparent hover:ring-emerald-200 transition-all duration-300">
                       <div className="flex items-center justify-between">
-                        <p className="text-[12px] font-medium text-emerald-900">👍 Positive</p>
+                        <div className="flex items-center gap-2">
+                          {/* 액센트 도트 */}
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 ring-2 ring-emerald-200/80"></span>
+                          <p className="text-[12px] font-semibold tracking-tight text-emerald-900">👍 Positive</p>
+                        </div>
                         <Pill color="green">강점</Pill>
                       </div>
-                      <p className="mt-2 text-[13px] leading-relaxed text-emerald-900 whitespace-pre-line">
+                      {/* hairline divider */}
+                      <div className="mt-3 h-px bg-gradient-to-r from-transparent via-emerald-200/70 to-transparent" />
+                      <p
+                        className="mt-3 text-[13px] leading-relaxed text-emerald-900/90 whitespace-pre-line
+                 data-[empty=true]:opacity-60"
+                        data-empty={!answer?.positive}
+                      >
                         {answer?.positive || "-"}
                       </p>
                     </div>
 
-                    <div className="rounded-lg border border-rose-100 bg-rose-50/60 p-3">
+                    {/* Negative */}
+                    <div className="group rounded-xl border border-rose-200/70 bg-rose-50/60 p-4
+                  ring-1 ring-transparent hover:ring-rose-200 transition-all duration-300">
                       <div className="flex items-center justify-between">
-                        <p className="text-[12px] font-medium text-rose-900">⚠️ Negative</p>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 ring-2 ring-rose-200/80"></span>
+                          <p className="text-[12px] font-semibold tracking-tight text-rose-900">⚠️ Negative</p>
+                        </div>
                         <Pill color="red">보완</Pill>
                       </div>
-                      <p className="mt-2 text-[13px] leading-relaxed text-rose-900 whitespace-pre-line">
+                      <div className="mt-3 h-px bg-gradient-to-r from-transparent via-rose-200/70 to-transparent" />
+                      <p
+                        className="mt-3 text-[13px] leading-relaxed text-rose-900/90 whitespace-pre-line
+                 data-[empty=true]:opacity-60"
+                        data-empty={!answer?.negative}
+                      >
                         {answer?.negative || "-"}
                       </p>
                     </div>
                   </div>
                 </div>
               )}
-            </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        {/* 원본 JSON (필요 시만 펼쳐보기 — 성능 저하 방지) */}
-        <details className="bg-gray-50 p-3 rounded border">
-          <summary className="cursor-pointer text-sm">원본 JSON 보기</summary>
-          <pre className="text-xs overflow-auto">{JSON.stringify(clip, null, 2)}</pre>
-        </details>
-      </main>
-    </div>
+      {/* 원본 JSON (필요 시만 펼쳐보기 — 성능 저하 방지) */}
+      <details className="bg-gray-50 p-3 rounded border">
+        <summary className="cursor-pointer text-sm">원본 JSON 보기</summary>
+        <pre className="text-xs overflow-auto">{JSON.stringify(clip, null, 2)}</pre>
+      </details>
+    </main>
+    </div >
   );
 }
