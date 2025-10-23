@@ -1,5 +1,5 @@
 // src/components/FocusOnlySynced.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -61,48 +61,85 @@ export default function FocusOnlySynced({
     if (v) setDuration(v.duration || 0);
   };
 
-  /** ───────── 플롯 bbox 측정(정확 정렬) ───────── */
-  useEffect(() => {
-    if (!chartWrapRef.current) return;
+  /** ───────── 플롯 bbox 측정(정확 정렬) ─────────
+   * 기존 useEffect → useLayoutEffect로 교체.
+   * SVG/GRID가 아직 없을 때 null 접근을 피하고, 실제 렌더가 끝나면 재측정.
+   */
+  useLayoutEffect(() => {
+    const root = chartWrapRef.current;
+    if (!root) return;
+
+    let rafId = 0;
+
+    const safeRound = (n) => Math.max(0, Math.round(n || 0));
 
     const measure = () => {
-      const root = chartWrapRef.current;
-      // root는 padding이 없는 relative 컨테이너여야 함
-      const containerRect = root.getBoundingClientRect();
+      const containerRect = root.getBoundingClientRect?.();
+      if (!containerRect || containerRect.width === 0 || containerRect.height === 0) {
+        rafId = requestAnimationFrame(measure);
+        return;
+      }
+
       const svg = root.querySelector("svg");
-      const grid = root.querySelector(".recharts-cartesian-grid") || root.querySelector(".recharts-surface");
-      let left = MARGIN.left, top = MARGIN.top;
-      let width = Math.max(0, root.clientWidth - (MARGIN.left + MARGIN.right));
-      let height = Math.max(0, root.clientHeight - (MARGIN.top + MARGIN.bottom));
+      const grid =
+        root.querySelector(".recharts-cartesian-grid") ||
+        root.querySelector(".recharts-surface");
+
+      // 방어: 아직 svg/grid가 없으면 다음 프레임으로 미룸
+      if (!svg || !grid) {
+        rafId = requestAnimationFrame(measure);
+        return;
+      }
+
+      let left = MARGIN.left,
+        top = MARGIN.top,
+        width = Math.max(0, root.clientWidth - (MARGIN.left + MARGIN.right)),
+        height = Math.max(0, root.clientHeight - (MARGIN.top + MARGIN.bottom));
 
       try {
-        if (svg && grid && grid.getBBox) {
+        const svgRect = svg.getBoundingClientRect?.();
+        if (svgRect && typeof grid.getBBox === "function") {
           const bb = grid.getBBox(); // svg 좌표계의 플롯 bbox
-          const svgRect = svg.getBoundingClientRect();
-          // svg → container 좌표로 변환
           left = (svgRect.left - containerRect.left) + bb.x;
-          top  = (svgRect.top  - containerRect.top)  + bb.y;
-          width  = bb.width;
+          top = (svgRect.top - containerRect.top) + bb.y;
+          width = bb.width;
           height = bb.height;
+        } else if (svgRect) {
+          // getBBox 불가 시 폴백: svg 영역에서 margin만 제외
+          left = svgRect.left - containerRect.left + MARGIN.left;
+          top = svgRect.top - containerRect.top + MARGIN.top;
+          width = Math.max(0, svgRect.width - (MARGIN.left + MARGIN.right));
+          height = Math.max(0, svgRect.height - (MARGIN.top + MARGIN.bottom));
         }
-      } catch { /* Safari 일부 예외 무시 */ }
+      } catch {
+        // Safari 등 예외는 무시 (기본 값 유지)
+      }
 
       setPlotRect({
-        left: Math.round(left),
-        top: Math.round(top),
-        width: Math.max(0, Math.round(width)),
-        height: Math.max(0, Math.round(height)),
+        left: safeRound(left),
+        top: safeRound(top),
+        width: safeRound(width),
+        height: safeRound(height),
       });
     };
 
-    // 초기 + 렌더 완료 다음 프레임 2번 보정
+    // 초기 측정 + 다음 프레임 보정
     measure();
-    requestAnimationFrame(() => requestAnimationFrame(measure));
+    rafId = requestAnimationFrame(measure);
 
-    const ro = new ResizeObserver(measure);
-    ro.observe(chartWrapRef.current);
+    // 차트 DOM 추가/변경 시 재측정
+    const mo = new MutationObserver(() => measure());
+    mo.observe(root, { childList: true, subtree: true });
+
+    // 컨테이너 리사이즈 시 재측정
+    const ro = new ResizeObserver(() => measure());
+    ro.observe(root);
+
     window.addEventListener("resize", measure);
+
     return () => {
+      cancelAnimationFrame(rafId);
+      mo.disconnect();
       ro.disconnect();
       window.removeEventListener("resize", measure);
     };
@@ -129,7 +166,7 @@ export default function FocusOnlySynced({
       v.currentTime = clamped;
       if (playAfter) {
         const p = v.play?.();
-        if (p && typeof p.catch === "function") p.catch(() => {}); // 자동재생 차단 무시
+        if (p && typeof p.catch === "function") p.catch(() => {});
       }
     }
     setCursorTime(clamped);

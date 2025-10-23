@@ -234,15 +234,6 @@ export default function SessionDetail() {
               <p className="text-sm text-gray-700">분석 스코어가 제공되지 않았습니다.</p>
             )}
           </div>
-
-          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-medium mb-2">포인트</h3>
-            <ul className="text-sm text-gray-700 list-disc pl-4 space-y-1">
-              <li>시선 각도(head/gaze) 변화 추세 파악</li>
-              <li>감정 확률의 급격한 피크 구간 확인</li>
-              <li>개선 답변을 다음 답변 스크립트에 반영</li>
-            </ul>
-          </div>
         </section>
 
         {/* 세부 분석: 탭 */}

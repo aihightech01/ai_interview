@@ -311,9 +311,7 @@ export default function EmotionOnlySynced({
             />
           </div>
 
-          <div className="mt-2 text-[11px] text-gray-400">
-            차트/슬라이더 클릭 → 영상 시크 (완전 동기화)
-          </div>
+
         </div>
       </div>
     </div>
