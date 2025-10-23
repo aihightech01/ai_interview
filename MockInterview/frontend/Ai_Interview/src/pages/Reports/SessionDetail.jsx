@@ -3,8 +3,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
 import { API_PATHS } from "../../utils/apiPaths";
-import EmotionHeatSlider from "../../components/EmotionHeatSlider";
-import EmotionDonut from "../../components/EmotionDonut";
 import EmotionOnlySynced from "../../components/EmotionOnlySynced";
 import FocusOnlySynced from "../../components/FocusOnlySynced";
 import { parseEmotion, toEmotionChartData } from "../../utils/transformEmotion";
@@ -30,17 +28,6 @@ function parseJSONDeep(maybeJSON, fallback = null) {
   } catch {
     return fallback;
   }
-}
-
-/** Top label 요약 */
-function summarizeTopLabels(emotions) {
-  if (!Array.isArray(emotions)) return { counts: {}, total: 0 };
-  const counts = {};
-  for (const e of emotions) {
-    const k = e.top_label || "unknown";
-    counts[k] = (counts[k] || 0) + 1;
-  }
-  return { counts, total: emotions.length };
 }
 
 /** 슬래시 보정 (로컬 경로 차단) */
@@ -82,9 +69,48 @@ function toVisionChartData(visionRaw, fps = 30) {
   });
 }
 
+/* ───────────── UI 보조 컴포넌트 ───────────── */
+function SectionTitle({ children }) {
+  return <h3 className="text-sm font-semibold text-gray-900">{children}</h3>;
+}
+function Pill({ children, color = "slate" }) {
+  const map = {
+    blue: "bg-blue-50 text-blue-700 ring-blue-200",
+    green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    red: "bg-rose-50 text-rose-700 ring-rose-200",
+    slate: "bg-slate-50 text-slate-700 ring-slate-200",
+  };
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ring-1 ${map[color] || map.slate}`}
+    >
+      {children}
+    </span>
+  );
+}
+function CopyButton({ text, className = "" }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text || "");
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        } catch {}
+      }}
+      className={`h-8 px-3 rounded-md border text-xs hover:bg-gray-50 ${className}`}
+      title="복사"
+      type="button"
+    >
+      {copied ? "복사됨" : "복사"}
+    </button>
+  );
+}
+/* ─────────────────────────────────────────── */
+
 export default function SessionDetail() {
   const { state } = useLocation();
-  0;
   const nav = useNavigate();
   const { sessionId, videoNo } = useParams();
 
@@ -95,23 +121,19 @@ export default function SessionDetail() {
 
   useEffect(() => {
     let ignore = false;
-
     (async () => {
       try {
         setLoading(true);
         setErr("");
         const url = API_PATHS.USER.PROFILE_DETAIL(sessionId, videoNo);
         const { data } = await api.get(url);
-        if (!ignore) {
-          setClip((prev) => ({ ...(prev || {}), ...(data || {}) }));
-        }
+        if (!ignore) setClip((prev) => ({ ...(prev || {}), ...(data || {}) }));
       } catch {
         if (!ignore) setErr("분석 데이터를 불러오지 못했습니다.");
       } finally {
         if (!ignore) setLoading(false);
       }
     })();
-
     return () => {
       ignore = true;
     };
@@ -129,14 +151,14 @@ export default function SessionDetail() {
   const emotions = useMemo(() => parseEmotion(analysis?.emotion), [analysis]);
   const answer = useMemo(() => safeParseJSON(analysis?.answer, {}) || {}, [analysis]);
   const emotionChartData = useMemo(() => toEmotionChartData(emotions, 30), [emotions]);
-  const emotionSummary = useMemo(() => summarizeTopLabels(emotions), [emotions]);
+
   const score = useMemo(() => {
     if (answer?.score == null) return null;
     const n = Number(answer.score);
     return Number.isFinite(n) ? n : null;
   }, [answer]);
 
-  // ✅ STT 세그먼트: 실제 경로는 analysis.answer.timeline_answer(문자열 JSON → 2중 파싱)
+  // ✅ STT 세그먼트: analysis.answer.timeline_answer(문자열 JSON → 2중 파싱)
   const sttSegments = useMemo(() => {
     const answerObj = parseJSONDeep(analysis?.answer, {}); // 1차
     const segs = parseJSONDeep(answerObj?.timeline_answer, []); // 2차
@@ -206,8 +228,7 @@ export default function SessionDetail() {
             <h3 className="text-sm font-medium mb-2">총평</h3>
             {score !== null ? (
               <p className="text-sm text-gray-700">
-                합격 가능성 지표{" "}
-                <span className="font-semibold text-blue-600">{score}%</span>
+                합격 가능성 지표 <span className="font-semibold text-blue-600">{score}%</span>
               </p>
             ) : (
               <p className="text-sm text-gray-700">분석 스코어가 제공되지 않았습니다.</p>
@@ -253,71 +274,89 @@ export default function SessionDetail() {
                     videoUrl={videoUrl}
                     poster={thumbUrl}
                     sttSegments={sttSegments}
-                    sttTimeUnit="s" // 필요하면 "ms"
+                    sttTimeUnit="s"
                   />
                 </div>
               )}
 
-              {/* 표정 */}
+              {/* 표정(경면 변화): AES 단일 라인 + 상태바 + 히트 슬라이더 */}
               {tab === "표정(경면 변화)" && (
-                <>
-                  <EmotionOnlySynced
-                    emotionChartData={emotionChartData}
-                    videoUrl={videoUrl}
-                    poster={thumbUrl}
-                  />
-                  {/* <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3">
-                    {emotionSummary.total > 0 ? (
-                      <ul className="list-disc pl-4 text-sm text-gray-700 space-y-1">
-                        {Object.entries(emotionSummary.counts).map(([k, v]) => {
-                          const ratio = Math.round((v / emotionSummary.total) * 100);
-                          return (
-                            <li key={k}>
-                              {k}: {v}프레임 ({ratio}%)
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <div className="text-xs text-gray-500">요약할 감정 레이블이 없습니다.</div>
-                    )}
-                  </div> */}
-                </>
+                <EmotionOnlySynced
+                  emotionChartData={emotionChartData}
+                  videoUrl={videoUrl}
+                  poster={thumbUrl}
+                />
               )}
 
               {/* 답변 분석 */}
               {tab === "답변 분석" && (
-                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-800 space-y-3">
-                  <div>
-                    <p className="text-[11px] text-gray-500">개선 답변</p>
-                    <p className="mt-1 whitespace-pre-line">
-                      {answer?.improved_answer || "제공된 개선 답변이 없습니다."}
-                    </p>
+                <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm space-y-4">
+                  {/* 헤더 라인 */}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <SectionTitle>답변 분석</SectionTitle>
+                      {typeof score === "number" && <Pill color="blue">스코어 {score}%</Pill>}
+                    </div>
+                    <div className="text-[11px] text-gray-500">개선 포인트와 요약을 확인해 보세요.</div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="bg-green-50 border border-green-100 rounded-lg p-3">
-                      <p className="text-[12px] font-medium text-green-800">👍 Positive</p>
-                      <p className="mt-1 text-[13px] text-green-900 whitespace-pre-line">
+
+                  {/* 개선 답변 카드 */}
+                  <div className="rounded-lg border border-gray-100">
+                    <details open className="group">
+                      <summary className="list-none cursor-pointer select-none flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[12px] font-medium text-gray-800">개선 답변</p>
+                          <Pill>초안</Pill>
+                        </div>
+                        <svg
+                          className="size-4 text-gray-400 transition-transform group-open:rotate-180"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                      </summary>
+
+                      <div className="px-4 pb-4 pt-1">
+                        <div className="rounded-md bg-gray-50/80 p-3 text-[13px] leading-relaxed text-gray-800 whitespace-pre-line">
+                          {answer?.improved_answer || "제공된 개선 답변이 없습니다."}
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <CopyButton text={answer?.improved_answer || ""} />
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+
+                  {/* Positive / Negative */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[12px] font-medium text-emerald-900">👍 Positive</p>
+                        <Pill color="green">강점</Pill>
+                      </div>
+                      <p className="mt-2 text-[13px] leading-relaxed text-emerald-900 whitespace-pre-line">
                         {answer?.positive || "-"}
                       </p>
                     </div>
-                    <div className="bg-red-50 border border-red-100 rounded-lg p-3">
-                      <p className="text-[12px] font-medium text-red-800">⚠️ Negative</p>
-                      <p className="mt-1 text-[13px] text-red-900 whitespace-pre-line">
+
+                    <div className="rounded-lg border border-rose-100 bg-rose-50/60 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[12px] font-medium text-rose-900">⚠️ Negative</p>
+                        <Pill color="red">보완</Pill>
+                      </div>
+                      <p className="mt-2 text-[13px] leading-relaxed text-rose-900 whitespace-pre-line">
                         {answer?.negative || "-"}
                       </p>
                     </div>
                   </div>
-                  {typeof score === "number" && (
-                    <div className="text-[12px] text-gray-600">
-                      스코어: <span className="font-semibold">{score}</span>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
-
-
           </div>
         </section>
 

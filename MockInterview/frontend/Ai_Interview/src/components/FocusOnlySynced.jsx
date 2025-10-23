@@ -28,18 +28,16 @@ export default function FocusOnlySynced({
   sttSegments = [],
   sttTimeUnit = "s",
 }) {
-  // ▶ 재생/정지 커서(차트 재렌더X)
-  const [cursorTime, setCursorTime] = useState(0);
-  // ▶ STT는 재생 중에도 실시간(15Hz)
-  const [sttTime, setSttTime] = useState(0);
-
+  // 타임라인 상태
+  const [cursorTime, setCursorTime] = useState(0); // 정지/탐색 기준
+  const [sttTime, setSttTime] = useState(0);       // 재생 중 15Hz
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
 
   const videoRef = useRef(null);
-  const chartWrapRef = useRef(null);
 
-  // 상태바 정렬용 플롯 bbox(컨테이너 좌표)
+  // 차트/오버레이 래퍼 & 플롯 bbox
+  const chartWrapRef = useRef(null);
   const [plotRect, setPlotRect] = useState({ left: 0, top: 0, width: 0, height: 0 });
 
   // 전체 길이
@@ -48,46 +46,58 @@ export default function FocusOnlySynced({
     return (duration && Number.isFinite(duration) ? duration : 0) || t || 0;
   }, [duration, visionChartData]);
 
+  // X 도메인
   const xDomain = useMemo(() => {
     const maxX = totalSec || visionChartData.at(-1)?.tSec || 0;
     return [0, Math.max(0, Number(maxX) || 0)];
   }, [totalSec, visionChartData]);
+
+  // 차트 margin(플롯 내부 패딩) — Recharts와 동일 값 사용
+  const MARGIN = { top: 20, right: 16, bottom: 22, left: 36 };
 
   const onLoadedMetadata = () => {
     const v = videoRef.current;
     if (v) setDuration(v.duration || 0);
   };
 
-  // ⬛ 플롯 bbox 측정 (SVG → 컨테이너 좌표로 변환)
+  /** ───────── 플롯 bbox 측정(정확 정렬) ───────── */
   useEffect(() => {
     if (!chartWrapRef.current) return;
+
     const measure = () => {
       const root = chartWrapRef.current;
+      // root는 padding이 없는 relative 컨테이너여야 함
       const containerRect = root.getBoundingClientRect();
       const svg = root.querySelector("svg");
-      const target =
-        root.querySelector(".recharts-cartesian-grid") ||
-        root.querySelector(".recharts-cartesian-axis") ||
-        root.querySelector(".recharts-layer.recharts-cartesian-axis") ||
-        root.querySelector(".recharts-surface");
-
-      let left = 12, top = 48;
-      let width = Math.max(0, root.clientWidth - 24);
-      let height = Math.max(0, root.clientHeight - 64);
+      const grid = root.querySelector(".recharts-cartesian-grid") || root.querySelector(".recharts-surface");
+      let left = MARGIN.left, top = MARGIN.top;
+      let width = Math.max(0, root.clientWidth - (MARGIN.left + MARGIN.right));
+      let height = Math.max(0, root.clientHeight - (MARGIN.top + MARGIN.bottom));
 
       try {
-        if (svg && target && target.getBBox) {
-          const bb = target.getBBox();
+        if (svg && grid && grid.getBBox) {
+          const bb = grid.getBBox(); // svg 좌표계의 플롯 bbox
           const svgRect = svg.getBoundingClientRect();
+          // svg → container 좌표로 변환
           left = (svgRect.left - containerRect.left) + bb.x;
           top  = (svgRect.top  - containerRect.top)  + bb.y;
-          width = bb.width;
+          width  = bb.width;
           height = bb.height;
         }
-      } catch {}
-      setPlotRect({ left, top, width: Math.max(0, width), height: Math.max(0, height) });
+      } catch { /* Safari 일부 예외 무시 */ }
+
+      setPlotRect({
+        left: Math.round(left),
+        top: Math.round(top),
+        width: Math.max(0, Math.round(width)),
+        height: Math.max(0, Math.round(height)),
+      });
     };
+
+    // 초기 + 렌더 완료 다음 프레임 2번 보정
     measure();
+    requestAnimationFrame(() => requestAnimationFrame(measure));
+
     const ro = new ResizeObserver(measure);
     ro.observe(chartWrapRef.current);
     window.addEventListener("resize", measure);
@@ -97,40 +107,36 @@ export default function FocusOnlySynced({
     };
   }, []);
 
-  // ▶ 플레이헤드 모션 (리렌더 없음)
+  /** ───────── 플레이헤드 모션(차트 리렌더 X) ───────── */
   const mvPct = useMotionValue(0);
   const prefersReduced = useReducedMotion();
-  const springPct = useSpring(mvPct, prefersReduced
-    ? { stiffness: 1000, damping: 100 }
-    : { stiffness: 220, damping: 26, mass: 0.9 }
+  const springPct = useSpring(
+    mvPct,
+    prefersReduced ? { stiffness: 1000, damping: 100 } : { stiffness: 220, damping: 26, mass: 0.9 }
   );
   const leftMV = useTransform(springPct, (p) => `${p * 100}%`);
 
-  const jumpTo = (t) => {
-    const v = videoRef.current;
-    const clamped = Math.max(xDomain[0], Math.min(xDomain[1], t));
-    if (v) v.currentTime = clamped;
-    setCursorTime(clamped);
-    setSttTime(clamped);
-    const pct = totalSec > 0 ? Math.min(1, Math.max(0, clamped / totalSec)) : 0;
+  const setPctFromTime = (t) => {
+    const pct = totalSec > 0 ? Math.min(1, Math.max(0, t / totalSec)) : 0;
     mvPct.set(pct);
   };
 
-  const handleChartClick = (e) => {
-    const el = chartWrapRef.current;
-    if (!el) return;
-    const containerRect = el.getBoundingClientRect();
-    const plotLeftAbs = containerRect.left + plotRect.left;
-    const w = Math.max(0, plotRect.width);
-    if (w === 0) return;
-    const clientX = (e && e.changedTouches ? e.changedTouches[0].clientX : e?.clientX) ?? null;
-    if (clientX == null) return;
-    const pct = (clientX - plotLeftAbs) / w;
-    const t = xDomain[0] + (xDomain[1] - xDomain[0]) * Math.min(1, Math.max(0, pct));
-    jumpTo(t);
+  const jumpTo = (t, playAfter = false) => {
+    const v = videoRef.current;
+    const clamped = Math.max(xDomain[0], Math.min(xDomain[1], t));
+    if (v) {
+      v.currentTime = clamped;
+      if (playAfter) {
+        const p = v.play?.();
+        if (p && typeof p.catch === "function") p.catch(() => {}); // 자동재생 차단 무시
+      }
+    }
+    setCursorTime(clamped);
+    setSttTime(clamped);
+    setPctFromTime(clamped);
   };
 
-  // ▶ 재생 중: 모션만 갱신 + STT는 15Hz로 setState
+  /** ───────── rVFC 15Hz 업데이트 ───────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -141,8 +147,7 @@ export default function FocusOnlySynced({
     const onFrame = () => {
       if (stop) return;
       const t = v.currentTime || 0;
-      const pct = totalSec > 0 ? Math.min(1, Math.max(0, t / totalSec)) : 0;
-      mvPct.set(pct);
+      setPctFromTime(t);
 
       const now = performance.now();
       if (now - last >= interval) {
@@ -158,8 +163,9 @@ export default function FocusOnlySynced({
       else requestAnimationFrame(onFrame);
     }
     return () => { stop = true; };
-  }, [isPlaying, totalSec, mvPct]);
+  }, [isPlaying, totalSec]);
 
+  // 점수
   const currentScore = useMemo(() => {
     if (!visionChartData.length || totalSec === 0) return 0;
     const idx = Math.min(
@@ -169,12 +175,12 @@ export default function FocusOnlySynced({
     return Number(visionChartData[idx]?.score ?? 0).toFixed(1);
   }, [cursorTime, totalSec, visionChartData]);
 
-  // 정적 차트
+  /** ───────── 정적 차트(한 번만 그림) ───────── */
   const ChartStatic = useMemo(() => {
-    const Memo = React.memo(function InnerChart({ data, domain, onClick }) {
+    const Memo = React.memo(function InnerChart({ data, domain }) {
       return (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} onClick={onClick}>
+          <LineChart data={data} margin={{ top: 60, right: 40, bottom: 5, left: 0 }}>
             <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
             <XAxis
               dataKey="tSec"
@@ -209,10 +215,73 @@ export default function FocusOnlySynced({
       );
     });
     return Memo;
-  }, []);
+  }, []); // 고정
+
+  /** ───────── 스크럽(클릭/드래그) ───────── */
+  const overlayRef = useRef(null);
+  const wasPlayingRef = useRef(false);
+  const scrubbingRef = useRef(false);
+  const startXRef = useRef(0);
+
+  const getTimeFromOverlay = (clientX) => {
+    const el = overlayRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const w = Math.max(1, rect.width);
+    const pct = Math.min(1, Math.max(0, (clientX - rect.left) / w));
+    return xDomain[0] + (xDomain[1] - xDomain[0]) * pct;
+  };
+
+  const onPointerDown = (e) => {
+    e.preventDefault();
+    const v = videoRef.current;
+    wasPlayingRef.current = !!(v && !v.paused && !v.ended);
+    scrubbingRef.current = false;
+    startXRef.current = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? 0;
+
+    // 단순 클릭은 pointerup에서 처리(즉시 재생)
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  };
+
+  const onPointerMove = (e) => {
+    const nowX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? startXRef.current;
+    if (!scrubbingRef.current && Math.abs(nowX - startXRef.current) > 4) {
+      // 스크럽 시작: 재생 중이면 일시정지
+      const v = videoRef.current;
+      if (v && wasPlayingRef.current) v.pause();
+      scrubbingRef.current = true;
+    }
+    if (scrubbingRef.current) {
+      const t = getTimeFromOverlay(nowX);
+      if (t != null) jumpTo(t, false);
+    }
+  };
+
+  const onPointerUp = (e) => {
+    const clientX = e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX);
+    if (scrubbingRef.current) {
+      // 드래그 종료: 원래 재생 상태로 복귀
+      const t = clientX != null ? getTimeFromOverlay(clientX) : null;
+      if (t != null) jumpTo(t, wasPlayingRef.current);
+    } else {
+      // 클릭: 해당 지점으로 이동 + 재생
+      if (clientX != null) {
+        const t = getTimeFromOverlay(clientX);
+        if (t != null) jumpTo(t, true);
+      }
+    }
+    window.removeEventListener("pointermove", onPointerMove);
+  };
+
+  // 비디오 이벤트(디바운스)
+  const playPauseTimer = useRef(null);
+  const setPlayingDebounced = (val) => {
+    clearTimeout(playPauseTimer.current);
+    playPauseTimer.current = setTimeout(() => setIsPlaying(val), 0);
+  };
 
   return (
-    // ✅ 2열 그리드: 위에는 "영상 | 차트", 아래 STT는 "두 칸(span 2)"
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* 🎥 영상 */}
       <div className="min-w-0">
@@ -228,19 +297,20 @@ export default function FocusOnlySynced({
               src={videoUrl}
               poster={poster || undefined}
               onLoadedMetadata={onLoadedMetadata}
-              onPlay={() => setIsPlaying(true)}
+              onPlay={() => setPlayingDebounced(true)}
               onPause={(e) => {
-                const t = e.currentTarget.currentTime || 0;
-                setIsPlaying(false);
-                jumpTo(t);
-              }}
-              onSeeked={(e) => {
-                const t = e.currentTarget.currentTime || 0;
-                jumpTo(t);
+                // 스크럽 중 pause는 무시하고, 실제 정지 시점에만 커서 동기화
+                if (!scrubbingRef.current) {
+                  const t = e.currentTarget.currentTime || 0;
+                  setPlayingDebounced(false);
+                  setCursorTime(t);
+                  setSttTime(t);
+                  setPctFromTime(t);
+                }
               }}
               onEnded={() => {
-                setIsPlaying(false);
-                jumpTo(0);
+                setPlayingDebounced(false);
+                jumpTo(0, false);
               }}
             />
           ) : (
@@ -255,50 +325,52 @@ export default function FocusOnlySynced({
       {/* 📊 집중도 그래프 */}
       <div className="min-w-0">
         <p className="text-base text-gray-800 font-semibold mb-2 text-center">집중도 변화 추이</p>
+
+        {/* 패딩 없는 래퍼에 차트 + 오버레이 동시 배치 */}
         <div
-          className="relative aspect-video rounded-2xl border border-gray-200 bg-white p-3 shadow-sm flex flex-col overflow-hidden"
           ref={chartWrapRef}
+          className="relative h-60 md:h-72 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"
         >
-          {/* 점수 태그 */}
-          <div className="absolute top-4 right-4 z-10">
+          {/* 점수 뱃지 */}
+          <div className="absolute top-3 right-3 z-20">
             <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-600 text-sm font-semibold shadow-sm">
               {currentScore} 점
             </span>
           </div>
 
-          {/* 상태바 오버레이 */}
+          {/* 차트(정적) */}
+          <div className="absolute inset-0">
+            <ChartStatic data={visionChartData} domain={xDomain} />
+          </div>
+
+          {/* ▶ 상태바/입력 오버레이: 플롯 bbox에 정확히 맞춤 */}
           <div
-            className="absolute pointer-events-none"
+            ref={overlayRef}
+            className="absolute z-10 touch-none select-none"
             style={{
               left: plotRect.left,
               top: plotRect.top,
               width: plotRect.width,
               height: plotRect.height,
             }}
+            onPointerDown={onPointerDown}
           >
             <motion.div className="absolute top-0 bottom-0" style={{ left: leftMV }}>
-              <div className="w-[2px] h-full bg-blue-600/80" />
+              <div className="w-[2px] h-full bg-blue-600/90" />
             </motion.div>
-          </div>
-
-          {/* 차트 본체 */}
-          <div className="flex-1 min-h-0">
-            <ChartStatic data={visionChartData} domain={xDomain} onClick={handleChartClick} />
           </div>
         </div>
       </div>
 
-      {/* 🗣️ STT — 아래 줄에서 두 칸 전체 폭 사용 */}
+      {/* 🗣️ STT (전체 폭) */}
       <div className="min-w-0 md:col-span-2">
-        <p className="text-base text-gray-800 font-semibold mb-2 text-center"></p>
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          {/* 높이: 필요에 맞게 조정 (예: 고정 360px or 화면 비율에 맞게) */}
           <div className="p-3">
             <SttSynced
               currentTime={isPlaying ? sttTime : cursorTime}
               segments={sttSegments}
               timeUnit={sttTimeUnit}
-              maxHeight="max-h-80" // 필요하면 'h-[360px]' 등으로 고정 가능
+              maxHeight="max-h-80"
               tokenHighlight
               approxWhenNoTokens
               smoothScroll
