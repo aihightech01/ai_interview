@@ -6,6 +6,7 @@ import { API_PATHS } from "../../utils/apiPaths";
 import EmotionOnlySynced from "../../components/EmotionOnlySynced";
 import FocusOnlySynced from "../../components/FocusOnlySynced";
 import { parseEmotion, toEmotionChartData } from "../../utils/transformEmotion";
+import ScoreCircle from "../../components/ScoreCircle";
 
 /** 안전 파싱 */
 function safeParseJSON(maybeJSON, fallback = null) {
@@ -16,6 +17,23 @@ function safeParseJSON(maybeJSON, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function extractOverallSection(raw, sectionTitle = "종합 평가") {
+  if (!raw) return "";
+
+  // 서버에서 \n이 이스케이프(\\n)로 올 수도 있어 처리
+  const text = raw.includes("\\n") && !raw.includes("\n")
+    ? raw.replace(/\\n/g, "\n")
+    : raw;
+
+  // 패턴:  (줄의 시작) ### [공백]*섹션제목 [:] (줄바꿈)  → 다음 헤더 전까지 캡처
+  const re = new RegExp(
+    String.raw`(?:^|\n)#{1,6}\s*${sectionTitle}\s*:?\s*\n([\s\S]*?)(?=\n#{1,6}\s*\S|$)`,
+    "m"
+  );
+  const m = re.exec(text);
+  return (m?.[1] || "").trim();
 }
 
 /** 이중 인코딩까지 커버 */
@@ -158,6 +176,11 @@ export default function SessionDetail() {
     return Number.isFinite(n) ? n : null;
   }, [answer]);
 
+  const summaryOnly = useMemo(
+    () => extractOverallSection(answer?.overall, "종합 평가"),
+    [answer]
+  );
+
   // ✅ STT 세그먼트: analysis.answer.timeline_answer(문자열 JSON → 2중 파싱)
   const sttSegments = useMemo(() => {
     const answerObj = parseJSONDeep(analysis?.answer, {}); // 1차
@@ -224,14 +247,35 @@ export default function SessionDetail() {
 
         {/* 총평/포인트 */}
         <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-medium mb-2">총평</h3>
+          <div className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm p-6 md:p-8">
+            <h3 className="text-sm font-medium mb-2 text-gray-800">총평</h3>
+
             {score !== null ? (
-              <p className="text-sm text-gray-700">
-                합격 가능성 지표 <span className="font-semibold text-blue-600">{score}%</span>
-              </p>
+              <>
+                <p className="text-sm text-gray-700">
+                  합격 가능성 지표{" "}
+                  <span className="font-semibold text-blue-600">{score}%</span>
+                </p>
+
+                <div className="mt-6 flex flex-col md:flex-row md:items-start md:gap-8">
+                  {/* 원형 점수 */}
+                  <div className="flex justify-center md:justify-start shrink-0">
+                    <ScoreCircle score={score} id="score-grad-total" />
+                  </div>
+
+                  {/* 종합 평가 본문 */}
+                  <div className="mt-4 md:mt-0 flex-1 bg-gray-50/80 border border-gray-200 rounded-2xl p-5 shadow-inner">
+                    <h4 className="text-sm font-semibold text-gray-600 mb-2">종합 평가</h4>
+                    <p className="text-sm text-gray-800 leading-7 whitespace-pre-line">
+                      {summaryOnly || "종합 평가 데이터가 없습니다."}
+                    </p>
+                  </div>
+                </div>
+              </>
             ) : (
-              <p className="text-sm text-gray-700">분석 스코어가 제공되지 않았습니다.</p>
+              <p className="text-sm text-gray-700">
+                분석 스코어가 제공되지 않았습니다.
+              </p>
             )}
           </div>
         </section>
@@ -418,16 +462,16 @@ export default function SessionDetail() {
                   </div>
                 </div>
               )}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* 원본 JSON (필요 시만 펼쳐보기 — 성능 저하 방지) */}
-      <details className="bg-gray-50 p-3 rounded border">
-        <summary className="cursor-pointer text-sm">원본 JSON 보기</summary>
-        <pre className="text-xs overflow-auto">{JSON.stringify(clip, null, 2)}</pre>
-      </details>
-    </main>
+        {/* 원본 JSON (필요 시만 펼쳐보기 — 성능 저하 방지) */}
+        <details className="bg-gray-50 p-3 rounded border">
+          <summary className="cursor-pointer text-sm">원본 JSON 보기</summary>
+          <pre className="text-xs overflow-auto">{JSON.stringify(clip, null, 2)}</pre>
+        </details>
+      </main>
     </div >
   );
 }
