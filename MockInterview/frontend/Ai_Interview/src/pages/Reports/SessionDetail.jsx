@@ -330,6 +330,8 @@ export default function SessionDetail() {
                   emotionChartData={emotionChartData}
                   videoUrl={videoUrl}
                   poster={thumbUrl}
+                  sttSegments={sttSegments}
+                  sttTimeUnit="s"
                 />
               )}
 
@@ -422,6 +424,14 @@ export default function SessionDetail() {
                         </div>
                         <div className="mt-2 flex items-center gap-2">
                           <CopyButton text={answer?.improved_answer || ""} />
+                        </div>
+                      </div>
+                      <div className="px-5 pb-4 pt-2">
+                        <div className="rounded-md border border-gray-100 bg-gray-50/70 p-3">
+                          <div className="text-[14px] font-semibold tracking-tight text-slate-800 dark:text-slate-100">기존 답변</div>
+                          <p className="text-[13px] leading-relaxed text-gray-800 whitespace-pre-line">
+                            {answer?.original_answer?.replace(/\\n/g, "\n") || "제공된 기존 답변이 없습니다."}
+                          </p>
                         </div>
                       </div>
                     </details>

@@ -30,7 +30,7 @@ export default function SttSynced({
   shaveEndSec = 0.06,
   epsSec = 0.08,
   totalSec = Infinity,
-  title = "STT",
+  title = "",
   maxHeight = "max-h-48",
   itemClassName = "",
   tokenHighlight = false,

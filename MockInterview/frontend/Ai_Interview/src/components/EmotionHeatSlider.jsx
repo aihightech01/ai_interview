@@ -1,10 +1,9 @@
 import React, { useMemo } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 
-// 데이터에 있는 감정 키 (surprise 제거됨)
+// surprise 제거
 const EMOTIONS = ["neutral", "happy", "sad", "angry", "fear", "disgust"];
 
-// 감정의 극성(부정:-1 ~ 긍정:+1)
 const VALENCE = {
   neutral: 0.0,
   happy: 1.0,
@@ -14,47 +13,31 @@ const VALENCE = {
   disgust: -0.9,
 };
 
-// 이모지 이미지 (surprise 제거)
 const EMOJI_SRC = {
-  neutral:
-    "/img/Microsoft-Fluentui-Emoji-3d-Neutral-Face-3d.512.png",
-  happy:
-    "/img/Microsoft-Fluentui-Emoji-3d-Grinning-Face-With-Smiling-Eyes-3d.512.png",
-  sad:
-    "/img/Microsoft-Fluentui-Emoji-3d-Sad-But-Relieved-Face-3d.512.png",
-  angry:
-    "/img/Microsoft-Fluentui-Emoji-3d-Pouting-Face-3d.512.png",
-  fear:
-    "/img/Microsoft-Fluentui-Emoji-3d-Pensive-Face-3d.512.png",
-  disgust:
-    "/img/Microsoft-Fluentui-Emoji-3d-Frowning-Face-3d.512.png",
+  neutral: "/img/Microsoft-Fluentui-Emoji-3d-Neutral-Face-3d.512.png",
+  happy: "/img/Microsoft-Fluentui-Emoji-3d-Grinning-Face-With-Smiling-Eyes-3d.512.png",
+  sad: "/img/Microsoft-Fluentui-Emoji-3d-Sad-But-Relieved-Face-3d.512.png",
+  angry: "/img/Microsoft-Fluentui-Emoji-3d-Pouting-Face-3d.512.png",
+  fear: "/img/Microsoft-Fluentui-Emoji-3d-Pensive-Face-3d.512.png",
+  disgust: "/img/Microsoft-Fluentui-Emoji-3d-Frowning-Face-3d.512.png",
 };
 
-// cursorTime에 가장 가까운 프레임 찾기
 function nearestFrame(data, t) {
   if (!data?.length) return null;
-  let best = data[0],
-    diff = Math.abs(t - data[0].t);
+  let best = data[0], diff = Math.abs(t - data[0].t);
   for (const f of data) {
     const d = Math.abs(t - f.t);
-    if (d < diff) {
-      best = f;
-      diff = d;
-    }
+    if (d < diff) { best = f; diff = d; }
   }
   return best;
 }
 
-// 프레임에서 확률이 가장 높은 감정 키 리턴
 function top1Emotion(frame) {
   let bestKey = "neutral";
   let bestVal = -Infinity;
   for (const k of EMOTIONS) {
     const v = frame[k];
-    if (v > bestVal) {
-      bestVal = v;
-      bestKey = k;
-    }
+    if (v > bestVal) { bestVal = v; bestKey = k; }
   }
   return bestKey;
 }
@@ -65,7 +48,8 @@ function top1Emotion(frame) {
  *  - cursorTime: number (초)
  *  - onChangeTime?: (t:number)
  *  - bins?: number
- *  - spring?: { stiffness?: number; damping?: number }
+ *  - spring?: { stiffness?: number; damping?: number }  // 기본 스프링 강도
+ *  - tempo?: "normal" | "slow" | "fast"                 // ✅ 전체 모션 템포
  */
 export default function EmotionHeatSlider({
   data,
@@ -73,8 +57,12 @@ export default function EmotionHeatSlider({
   onChangeTime,
   bins = 7,
   spring = { stiffness: 260, damping: 28 },
+  tempo = "slow", // ← 기본을 'slow'로 설정해 둠
 }) {
   const reduce = useReducedMotion();
+
+  // ✅ tempo 계수: slow->느리게, fast->빠르게
+  const tempoFactor = tempo === "slow" ? 1.8 : tempo === "fast" ? 0.7 : 1.0;
 
   const { topKey, valence } = useMemo(() => {
     const f = nearestFrame(data || [], cursorTime || 0);
@@ -103,10 +91,7 @@ export default function EmotionHeatSlider({
       const k = top1Emotion(f);
       const v = VALENCE[k] ?? 0;
       const score = Math.abs(v - midV);
-      if (score < bestScore) {
-        bestScore = score;
-        bestT = f.t;
-      }
+      if (score < bestScore) { bestScore = score; bestT = f.t; }
     }
     if (bestT != null) onChangeTime(bestT);
   };
@@ -114,16 +99,34 @@ export default function EmotionHeatSlider({
   const gradient =
     "linear-gradient(to right, #d7263d, #ff8c42, #ffd166, #fff4be, #a2e68d, #61e276, #2ef14f)";
 
+  // ✅ cursor(이모지 버블) 이동 스프링: stiffness ↓, damping ↑, 전체 느리게
   const cursorTransition = reduce
     ? { duration: 0 }
-    : { type: "spring", stiffness: spring.stiffness, damping: spring.damping };
+    : {
+        type: "spring",
+        stiffness: Math.max(60, spring.stiffness / tempoFactor), // 느리면 강도 낮춤
+        damping: spring.damping * tempoFactor,                    // 느리면 감쇠 늘림
+        mass: 1.0,
+      };
+
+  // ✅ 등장/페이드, 트랙 브라이트니스 루프도 템포 반영(길게)
+  const fadeDuration = reduce ? 0 : 0.25 * tempoFactor;
+  const pulseDuration = reduce ? 0 : 2.4 * tempoFactor;
+
+  // ✅ 이모지 교체 애니메이션도 살짝 느리게
+  const bubbleSpring = reduce
+    ? { duration: 0 }
+    : { type: "spring", stiffness: 220 / tempoFactor, damping: 24 * tempoFactor };
+  const emojiSpring = reduce
+    ? { duration: 0 }
+    : { type: "spring", stiffness: 260 / tempoFactor, damping: 26 * tempoFactor };
 
   return (
     <motion.div
       className="w-full"
       initial={reduce ? false : { opacity: 0, y: 6 }}
       animate={reduce ? {} : { opacity: 1, y: 0 }}
-      transition={reduce ? { duration: 0 } : { duration: 0.25, ease: "easeOut" }}
+      transition={reduce ? { duration: 0 } : { duration: fadeDuration, ease: "easeOut" }}
     >
       <div className="relative w-full select-none">
         {/* 트랙 */}
@@ -137,7 +140,7 @@ export default function EmotionHeatSlider({
           transition={
             reduce
               ? { duration: 0 }
-              : { duration: 2.4, repeat: Infinity, ease: "easeInOut" }
+              : { duration: pulseDuration, repeat: Infinity, ease: "easeInOut" }
           }
         >
           <div className="relative w-full h-full flex">
@@ -166,7 +169,7 @@ export default function EmotionHeatSlider({
             className="w-12 h-12 rounded-full bg-white shadow flex items-center justify-center"
             initial={reduce ? false : { scale: 0.9, opacity: 0 }}
             animate={reduce ? {} : { scale: 1, opacity: 1 }}
-            transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 24 }}
+            transition={bubbleSpring}
           >
             <motion.img
               key={`${topKey}-${Math.round(posPct)}`}
@@ -175,10 +178,8 @@ export default function EmotionHeatSlider({
               className="w-10 h-10 object-contain"
               initial={reduce ? false : { y: -2, opacity: 0.9 }}
               animate={reduce ? {} : { y: 0, opacity: 1 }}
-              transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 400, damping: 22 }}
-              onError={(e) => {
-                e.currentTarget.src = EMOJI_SRC.neutral;
-              }}
+              transition={emojiSpring}
+              onError={(e) => { e.currentTarget.src = EMOJI_SRC.neutral; }}
             />
           </motion.div>
         </motion.div>

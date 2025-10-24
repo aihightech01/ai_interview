@@ -177,12 +177,25 @@ export default function SessionPreview() {
                 <h3 className="text-sm font-semibold text-gray-900">총평</h3>
               </div>
 
-              <p className="text-[15px] text-gray-700 leading-7 tracking-tight">
-                이전에는 영상과 음성의 전달이 다소 불안정해 메시지가 명확하게 전달되지 않았습니다.
+              <div className="text-[15px] text-gray-700 leading-7 tracking-tight">
+                <p>이전에는 영상과 음성의 전달이 다소 불안정해 메시지가 명확하게 전달되지 않았습니다.</p>
                 그러나 현재 결과에서는 발화 속도와 표현의 일관성이 개선되어 전달력이 한층 높아졌습니다.
                 앞으로는 이러한 안정감을 바탕으로 감정 표현의 자연스러움을 보완해 나가면 좋겠습니다.
-              </p>
+              </div>
+
+              <div className="flex items-center gap-2 mb-3 mt-8">
+                <div className="w-1.5 h-5 bg-indigo-500 rounded-full"></div>
+                <h3 className="text-sm font-semibold text-gray-900">이전 인터뷰와 비교</h3>
+              </div>
+
+
+              <div className="text-[15px] text-gray-700 leading-7 tracking-tight">
+                <p>이전에는 영상과 음성의 전달이 다소 불안정해 메시지가 명확하게 전달되지 않았습니다.</p>
+                그러나 현재 결과에서는 발화 속도와 표현의 일관성이 개선되어 전달력이 한층 높아졌습니다.
+                앞으로는 이러한 안정감을 바탕으로 감정 표현의 자연스러움을 보완해 나가면 좋겠습니다.
+              </div>
             </section>
+
           </div>
 
           {/* 질문 카드 리스트 */}
@@ -208,7 +221,7 @@ export default function SessionPreview() {
                       ${!c.videoNo ? "opacity-50 cursor-not-allowed" : ""}`}
                     title={c.videoNo ? "" : "videoNo가 없어 이동할 수 없습니다"}
                   >
-                    <div className="h-32 bg-blue-50">
+                    <div className="h-42 bg-blue-50">
                       {c.posterUrl ? (
                         <img
                           src={c.posterUrl}
@@ -221,9 +234,22 @@ export default function SessionPreview() {
                           }
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                          구현예정
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400 bg-gray-50 rounded-lg overflow-hidden">
+                          <img
+                            src={
+                              c.posterUrl ||
+                              `http://172.31.57.139:8080/thumbnail?path=${encodeURIComponent(
+                                c.thumbnailDir ?? ""
+                              )}`
+                            }
+                            alt="thumbnail"
+                            className="max-w-full max-h-full object-contain"
+                            onError={() =>
+                              console.warn("⚠️ 썸네일 로드 실패:", c.thumbnailDir)
+                            }
+                          />
                         </div>
+
                       )}
                     </div>
                     <div className="p-4">
