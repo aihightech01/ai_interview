@@ -585,11 +585,11 @@ export default function SessionDetail() {
           </div>
         </section>
 
-        {/* 원본 JSON (필요 시만) */}
+        {/* 원본 JSON (필요 시만)
         <details className="bg-gray-50 p-3 rounded border">
           <summary className="cursor-pointer text-sm">원본 JSON 보기</summary>
           <pre className="text-xs overflow-auto">{JSON.stringify(clip, null, 2)}</pre>
-        </details>
+        </details> */}
       </main>
     </div>
   );
