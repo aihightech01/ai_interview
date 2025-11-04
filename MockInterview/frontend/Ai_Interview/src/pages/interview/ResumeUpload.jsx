@@ -78,6 +78,7 @@ export default function ResumeUploadPage() {
   /**
    * 최종 제출(질문 생성 버튼)에서만 서버 호출
    * - 자소서 파일/텍스트가 없어도 제목만 보내서 저장되도록 허용
+   *   (기존 로직은 textContent를 항상 포함)
    */
   async function onGenerateList() {
     if (!interviewNo) {
@@ -128,6 +129,71 @@ export default function ResumeUploadPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  // ===== (추가) 제목만 저장: 제목만 FormData에 담아 저장 후 질문 페이지로 이동 =====
+  async function onSaveTitleOnly() {
+    if (!interviewNo) {
+      alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해 주세요.");
+      nav("/interview/select");
+      return;
+    }
+    if (!ensureTitleOrFocus()) return;
+
+    const fd = new FormData();
+    fd.append("interviewTitle", title.trim()); // ✅ 제목만
+
+    logFormData(fd);
+
+    const url = `/resumes/upload/${encodeURIComponent(interviewNo)}?onlyTitle=1`;
+
+    try {
+      setLoading(true);
+
+      const { data } = await uploadAxios.post(url, fd, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : undefined,
+        },
+      });
+
+      if (!data || data.message !== true) {
+        console.error("[ResumeUpload:titleOnly] unexpected response:", data);
+        throw new Error("업로드 응답이 올바르지 않습니다.");
+      }
+
+      // 제목만 저장 후에도 질문 페이지로 이동
+      nav("/interview/questions", { replace: true });
+    } catch (err) {
+      console.error("[ResumeUpload:titleOnly] upload error:", {
+        url,
+        status: err?.response?.status,
+        statusText: err?.response?.statusText,
+        data: err?.response?.data,
+      });
+      alert(
+        `제목 저장에 실패했습니다.\n` +
+        (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
+        `콘솔 로그를 확인해주세요.`
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ===== (추가) 라우터: 파일/텍스트 유무에 따라 적절한 전송 선택 =====
+  async function onGenerateFlexible() {
+    if (!ensureTitleOrFocus()) return;
+
+    const hasText = (text ?? "").trim().length > 0;
+    const hasFile = file instanceof File && file.size > 0;
+
+    if (!hasText && !hasFile) {
+      // 제목만 → 제목 저장 API 호출 후 질문 페이지로 이동
+      await onSaveTitleOnly();
+    } else {
+      // 기존 전체 업로드 로직 재사용
+      await onGenerateList();
     }
   }
 
@@ -510,7 +576,7 @@ export default function ResumeUploadPage() {
               <div className="px-6 pb-6">
                 <motion.button
                   type="button"
-                  onClick={onGenerateList}
+                  onClick={onGenerateFlexible}  // ← 제목만 있어도 진행
                   disabled={loading || titleEmpty}
                   className={`inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ${titleEmpty ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"
                     }`}
