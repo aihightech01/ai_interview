@@ -15,153 +15,89 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
-import {
-  motion,
-  useMotionValue,
-  useSpring,
-  useReducedMotion,
-  useTransform,
-} from "framer-motion";
+import { motion, useMotionValue, useSpring, useReducedMotion, useTransform } from "framer-motion";
 import EmotionHeatSlider from "./EmotionHeatSlider";
-import SttSynced from "../components/SttSynced";
+import SttSynced from "../components/SttSynced"
 
 /** mm:ss.s */
 function fmt(sec = 0) {
-  const mm = Math.floor(sec / 60);
-  const ss = (sec - mm * 60).toFixed(1);
-  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(4, "0")}`;
+  const m = Math.floor(sec);
+  const s = (sec - m).toFixed(1);
+  const mm = Math.floor(m / 60);
+  const ss = (m % 60) + s.slice(1);
+  return `${String(mm).padStart(2, "0")}:${ss.padStart(4, "0")}`;
 }
 
-/** 감정 팔레트 */
+/** 감정 팔레트(Tailwind tone에 맞춘 hex) */
 const EMO_COLOR = {
-  happy: { bg: "#FEF3C7", fg: "#B45309" },
-  angry: { bg: "#FEE2E2", fg: "#B91C1C" },
-  sad: { bg: "#DBEAFE", fg: "#1D4ED8" },
-  fear: { bg: "#EDE9FE", fg: "#6D28D9" },
-  disgust: { bg: "#DCFCE7", fg: "#15803D" },
-  surprise: { bg: "#CFFAFE", fg: "#0E7490" },
-  neutral: { bg: "#E5E7EB", fg: "#374151" },
+  happy:   { bg: "#FEF3C7", fg: "#B45309" }, // amber-100 / amber-700
+  angry:   { bg: "#FEE2E2", fg: "#B91C1C" }, // red-100 / red-700
+  sad:     { bg: "#DBEAFE", fg: "#1D4ED8" }, // blue-100 / blue-700
+  fear:    { bg: "#EDE9FE", fg: "#6D28D9" }, // violet-100 / violet-700
+  disgust: { bg: "#DCFCE7", fg: "#15803D" }, // green-100 / green-700
+  surprise:{ bg: "#CFFAFE", fg: "#0E7490" }, // cyan-100 / cyan-700
+  neutral: { bg: "#E5E7EB", fg: "#374151" }, // gray-200 / gray-700
 };
 
-const LABELS = ["angry", "disgust", "fear", "happy", "sad", "surprise", "neutral"];
+/** 감정 key 목록(확률 필드명과 동일) */
+const LABELS = ["angry","disgust","fear","happy","sad","surprise","neutral"];
 
 /** AES 계산 보조 */
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
 const pctToProb = (v) => clamp01((v || 0) / 100);
 const normalize = (arr) => {
-  const s = arr.reduce((a, b) => a + b, 0);
-  if (!isFinite(s) || s <= 0) return arr.map(() => 0);
-  return arr.map((v) => v / s);
+  const s = arr.reduce((a,b)=>a+b, 0);
+  if (!isFinite(s) || s <= 0) return arr.map(()=>0);
+  return arr.map(v => v / s);
 };
 const entropy = (probs) => {
-  const eps = 1e-12;
-  let H = 0;
-  for (const p of probs) {
-    const pp = Math.max(p, eps);
-    H += -pp * Math.log(pp);
-  }
+  const eps = 1e-12; let H = 0;
+  for (const p of probs) { const pp = Math.max(p, eps); H += -pp * Math.log(pp); }
   return H;
 };
 
 const VALENCE_MAP = {
-  angry: -0.9,
-  disgust: -0.7,
-  fear: -0.8,
-  sad: -0.9,
-  happy: 0.9,
-  surprise: 0.3,
-  neutral: 0.0,
+  angry: -0.9, disgust: -0.7, fear: -0.8, sad: -0.9,
+  happy: 0.9, surprise: 0.3, neutral: 0.0,
 };
 const AROUSAL_MAP = {
-  angry: 0.8,
-  disgust: 0.4,
-  fear: 0.9,
-  sad: 0.2,
-  happy: 0.7,
-  surprise: 1.0,
-  neutral: 0.1,
-};
-
-/** 입력 유연화: 배열/객체 모두 rows 추출 */
-function resolveEmotionRows(input) {
-  if (Array.isArray(input)) return input;
-  if (input && typeof input === "object") {
-    if (Array.isArray(input.results)) return input.results;
-    if (Array.isArray(input.frames)) return input.frames;
-    if (Array.isArray(input.time_series)) return input.time_series;
-    if (Array.isArray(input.data)) return input.data;
-  }
-  return [];
-}
-
-/** ✅ 안전 어댑터: 객체/배열 모두 처리 + 0~1 스케일 자동 업스케일 */
-const toEmotionData = (input, fps = 30) => {
-  const rows = resolveEmotionRows(input);
-  if (!Array.isArray(rows)) return [];
-  return rows.map((r) => {
-    const t = r.t != null ? Number(r.t) : Number(r.frame_idx ?? 0) / fps;
-
-    const raw = {
-      neutral: Number(r.neutral ?? 0),
-      happy: Number(r.happy ?? 0),
-      sad: Number(r.sad ?? 0),
-      angry: Number(r.angry ?? 0),
-      fear: Number(r.fear ?? 0),
-      disgust: Number(r.disgust ?? 0),
-      surprise: Number(r.surprise ?? 0),
-    };
-    const vals = Object.values(raw);
-    const needsUpscale = vals.length > 0 && vals.every((v) => Number.isFinite(v) && v <= 1);
-    const scale = needsUpscale ? 100 : 1;
-
-    return {
-      t,
-      neutral: raw.neutral * scale,
-      happy: raw.happy * scale,
-      sad: raw.sad * scale,
-      angry: raw.angry * scale,
-      fear: raw.fear * scale,
-      disgust: raw.disgust * scale,
-      surprise: raw.surprise * scale,
-      score: Number.isFinite(Number(r.score)) ? Number(r.score) : null, // 옵션
-    };
-  });
+  angry: 0.8, disgust: 0.4, fear: 0.9, sad: 0.2,
+  happy: 0.7, surprise: 1.0, neutral: 0.1,
 };
 
 export default function EmotionOnlySynced({
-  emotionChartData = [],     // 배열 또는 { average_score, results } 등 객체 모두 허용
+  emotionChartData = [],     // [{ t, neutral, happy, sad, angry, fear, disgust, surprise }, ...]  // % (0~100)
   videoUrl = "",
   poster = "",
-  sttSegments = [],
+  sttSegments = [],          // STT 세그먼트(있으면 하단에 표시)
   sttTimeUnit = "s",
 }) {
-  // ✅ 1회 어댑팅
-  const emotionData = useMemo(() => toEmotionData(emotionChartData, 30), [emotionChartData]);
-
-  // 타임라인 상태
-  const [cursorTime, setCursorTime] = useState(0);
-  const [sttTime, setSttTime] = useState(0);
+  // 타임라인 상태(포커스 컴포와 동일한 구조/정책)
+  const [cursorTime, setCursorTime] = useState(0); // 정지/탐색 기준
+  const [sttTime, setSttTime] = useState(0);       // 재생 중 15Hz
   const [isPlaying, setIsPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
 
   const videoRef = useRef(null);
 
-  // 차트 bbox 계산용
+  // 차트/오버레이 래퍼 & 플롯 bbox
   const chartWrapRef = useRef(null);
   const overlayRef = useRef(null);
   const [plotRect, setPlotRect] = useState({ left: 0, top: 0, width: 0, height: 0 });
 
-  // 총 길이
+  // 총 길이: 영상 duration 우선, 없으면 데이터 마지막 t
   const totalSec = useMemo(() => {
-    const t = emotionData.at(-1)?.t || 0;
+    const t = emotionChartData.at(-1)?.t || 0;
     return (duration && Number.isFinite(duration) ? duration : 0) || t || 0;
-  }, [duration, emotionData]);
+  }, [duration, emotionChartData]);
 
+  // X 도메인
   const xDomain = useMemo(() => {
-    const maxX = totalSec || (emotionData.at(-1)?.t ?? 0);
+    const maxX = totalSec || (emotionChartData.at(-1)?.t ?? 0);
     return [0, Math.max(0, Number(maxX) || 0)];
-  }, [totalSec, emotionData]);
+  }, [totalSec, emotionChartData]);
 
+  // 차트 margin(플롯 내부 패딩) — Recharts와 동일 값 사용
   const MARGIN = { top: 20, right: 16, bottom: 22, left: 36 };
   const CHART_MARGIN = { top: 60, right: 40, bottom: 5, left: 0 };
 
@@ -170,7 +106,7 @@ export default function EmotionOnlySynced({
     if (v) setDuration(v.duration || 0);
   };
 
-  /** bbox 측정 */
+  /** ───────── 플롯 bbox 측정(정확 정렬) ───────── */
   useLayoutEffect(() => {
     const root = chartWrapRef.current;
     if (!root) return;
@@ -188,7 +124,8 @@ export default function EmotionOnlySynced({
 
       const svg = root.querySelector("svg");
       const grid =
-        root.querySelector(".recharts-cartesian-grid") || root.querySelector(".recharts-surface");
+        root.querySelector(".recharts-cartesian-grid") ||
+        root.querySelector(".recharts-surface");
 
       if (!svg || !grid) {
         rafId = requestAnimationFrame(measure);
@@ -204,11 +141,12 @@ export default function EmotionOnlySynced({
         const svgRect = svg.getBoundingClientRect?.();
         if (svgRect && typeof grid.getBBox === "function") {
           const bb = grid.getBBox();
-          left = svgRect.left - containerRect.left + bb.x;
-          top = svgRect.top - containerRect.top + bb.y;
+          left = (svgRect.left - containerRect.left) + bb.x;
+          top = (svgRect.top - containerRect.top) + bb.y;
           width = bb.width;
           height = bb.height;
         } else if (svgRect) {
+          // 폴백
           left = svgRect.left - containerRect.left + MARGIN.left;
           top = svgRect.top - containerRect.top + MARGIN.top;
           width = Math.max(0, svgRect.width - (MARGIN.left + MARGIN.right));
@@ -224,12 +162,15 @@ export default function EmotionOnlySynced({
       });
     };
 
+    // 초기 측정 + 다음 프레임 보정
     measure();
     rafId = requestAnimationFrame(measure);
 
+    // 차트 DOM 추가/변경 시 재측정
     const mo = new MutationObserver(() => measure());
     mo.observe(root, { childList: true, subtree: true });
 
+    // 컨테이너 리사이즈 시 재측정
     const ro = new ResizeObserver(() => measure());
     ro.observe(root);
 
@@ -243,7 +184,7 @@ export default function EmotionOnlySynced({
     };
   }, []);
 
-  /** rVFC 15Hz + 스프링 플레이헤드 */
+  /** ───────── rVFC 15Hz 업데이트 + 스프링 플레이헤드 ───────── */
   const mvPct = useMotionValue(0);
   const prefersReduced = useReducedMotion();
   const springPct = useSpring(
@@ -297,9 +238,7 @@ export default function EmotionOnlySynced({
       if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(onFrame);
       else requestAnimationFrame(onFrame);
     }
-    return () => {
-      stop = true;
-    };
+    return () => { stop = true; };
   }, [isPlaying, totalSec]);
 
   // 비디오 이벤트(디바운스)
@@ -309,13 +248,12 @@ export default function EmotionOnlySynced({
     playPauseTimer.current = setTimeout(() => setIsPlaying(val), 0);
   };
 
-  /** AES 시계열 + 현재 지배 감정 */
+  /** ───────── AES 시계열 + 현재 지배 감정 ───────── */
   const aesSeries = useMemo(() => {
-    if (!emotionData.length) return [];
-    return emotionData.map((row) => {
-      const probs = normalize(LABELS.map((lb) => pctToProb(row?.[lb])));
-      let V = 0,
-        A = 0;
+    if (!emotionChartData.length) return [];
+    return emotionChartData.map((row) => {
+      const probs = normalize(LABELS.map(lb => pctToProb(row?.[lb])));
+      let V = 0, A = 0;
       for (let i = 0; i < LABELS.length; i++) {
         const lb = LABELS[i];
         V += probs[i] * (VALENCE_MAP[lb] ?? 0);
@@ -334,43 +272,33 @@ export default function EmotionOnlySynced({
 
       return {
         tSec: row.t || 0,
-        aes: Math.round(aes01 * 1000) / 10,
+        aes: Math.round(aes01 * 1000) / 10, // 0~100 소수1자리
         domEmotion,
-        rawScore: Number.isFinite(row?.score) ? row.score : null, // 선택
       };
     });
-  }, [emotionData]);
-
-  const hasRawScore = useMemo(
-    () => aesSeries.some((d) => Number.isFinite(d.rawScore)),
-    [aesSeries]
-  );
+  }, [emotionChartData]);
 
   const currentPoint = useMemo(() => {
     if (!aesSeries.length || totalSec === 0) return { aes: 0, domEmotion: "neutral" };
     const t = isPlaying ? sttTime : cursorTime;
-    let lo = 0,
-      hi = aesSeries.length - 1;
+    // 이진 탐색(데이터가 조밀하면 선형으로도 OK)
+    let lo = 0, hi = aesSeries.length - 1;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if ((aesSeries[mid]?.tSec || 0) < t) lo = mid + 1;
-      else hi = mid;
+      if ((aesSeries[mid]?.tSec || 0) < t) lo = mid + 1; else hi = mid;
     }
     const i = Math.max(0, Math.min(aesSeries.length - 1, lo));
-    return {
-      aes: Number(aesSeries[i]?.aes || 0),
-      domEmotion: aesSeries[i]?.domEmotion || "neutral",
-    };
+    return { aes: Number(aesSeries[i]?.aes || 0), domEmotion: aesSeries[i]?.domEmotion || "neutral" };
   }, [aesSeries, cursorTime, sttTime, isPlaying, totalSec]);
 
   const emotionColor = EMO_COLOR[currentPoint.domEmotion] ?? EMO_COLOR.neutral;
 
-  /** 정적 차트 */
+  /** ───────── 정적 차트(한 번만 그림) ───────── */
   const ChartStatic = useMemo(() => {
-    const Memo = React.memo(function InnerChart({ data, domain, showRaw }) {
+    const Memo = React.memo(function InnerChart({ data, domain }) {
       return (
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 60, right: 40, bottom: 5, left: 0 }}>
+          <LineChart data={data} margin={CHART_MARGIN}>
             <CartesianGrid stroke="#f3f4f6" strokeDasharray="3 3" />
             <XAxis
               dataKey="tSec"
@@ -391,7 +319,7 @@ export default function EmotionOnlySynced({
               formatter={(v, n, p) => {
                 const i = p?.payload;
                 const emo = i?.domEmotion || "neutral";
-                return [`${Number(v).toFixed(1)} 점`, n === "AES" ? `AES · ${emo}` : "원본 점수"];
+                return [`${Number(v).toFixed(1)} 점`, `AES · ${emo}`];
               }}
               labelFormatter={(t) => `시간 ${fmt(Number(t))}`}
             />
@@ -401,29 +329,17 @@ export default function EmotionOnlySynced({
               name="AES"
               dot={false}
               isAnimationActive={false}
-              stroke="#f59e0b"
+              stroke="#f59e0b"     // 그래프 라인은 주황 고정(성능↑, 가독성↑)
               strokeWidth={3}
             />
-            {showRaw && (
-              <Line
-                type="linear"
-                dataKey="rawScore"
-                name="원본 점수"
-                dot={false}
-                isAnimationActive={false}
-                stroke="#6366f1"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-              />
-            )}
           </LineChart>
         </ResponsiveContainer>
       );
     });
     return Memo;
-  }, []);
+  }, []); // 고정 컴포넌트
 
-  /** 스크럽 */
+  /** ───────── 스크럽(클릭/드래그) ───────── */
   const wasPlayingRef = useRef(false);
   const scrubbingRef = useRef(false);
   const startXRef = useRef(0);
@@ -435,8 +351,7 @@ export default function EmotionOnlySynced({
     const w = Math.max(1, rect.width);
     const pct = Math.min(1, Math.max(0, (clientX - rect.left) / w));
     return xDomain[0] + (xDomain[1] - xDomain[0]) * pct;
-  };
-
+    };
   const onPointerDown = (e) => {
     e.preventDefault();
     const v = videoRef.current;
@@ -447,7 +362,6 @@ export default function EmotionOnlySynced({
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp, { once: true });
   };
-
   const onPointerMove = (e) => {
     const nowX = e.clientX ?? (e.touches && e.touches[0]?.clientX) ?? startXRef.current;
     if (!scrubbingRef.current && Math.abs(nowX - startXRef.current) > 4) {
@@ -460,7 +374,6 @@ export default function EmotionOnlySynced({
       if (t != null) jumpTo(t, false);
     }
   };
-
   const onPointerUp = (e) => {
     const clientX = e.clientX ?? (e.changedTouches && e.changedTouches[0]?.clientX);
     if (scrubbingRef.current) {
@@ -519,11 +432,12 @@ export default function EmotionOnlySynced({
       <div className="min-w-0">
         <p className="text-base text-gray-800 font-semibold mb-2 text-center">감정 점수 변화(AES)</p>
 
+        {/* 패딩 없는 래퍼에 차트 + 오버레이 동시 배치 */}
         <div
           ref={chartWrapRef}
           className="relative h-60 md:h-72 rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden"
         >
-          {/* 점수 뱃지 */}
+          {/* 점수 뱃지 — 현재 지배 감정 색상 반영 */}
           <div className="absolute top-3 right-3 z-20">
             <span
               className="px-3 py-1 rounded-full text-sm font-semibold shadow-sm"
@@ -533,12 +447,12 @@ export default function EmotionOnlySynced({
             </span>
           </div>
 
-          {/* 차트 */}
+          {/* 차트(정적) */}
           <div className="absolute inset-0">
-            <ChartStatic data={aesSeries} domain={xDomain} showRaw={hasRawScore} />
+            <ChartStatic data={aesSeries} domain={xDomain} />
           </div>
 
-          {/* ▶ 상태바/입력 오버레이 */}
+          {/* ▶ 상태바/입력 오버레이: 플롯 bbox에 정확히 맞춤 — 플레이헤드도 감정색 */}
           <div
             ref={overlayRef}
             className="absolute z-10 touch-none select-none"
@@ -559,10 +473,10 @@ export default function EmotionOnlySynced({
           </div>
         </div>
 
-        {/* 감정 히트 슬라이더 */}
+        {/* ② 감정 히트 슬라이더: 차트와 항상 함께, 동기화 */}
         <div className="mt-3 rounded-2xl border border-gray-200 bg-white shadow-sm p-3">
           <EmotionHeatSlider
-            data={emotionData}
+            data={emotionChartData}
             cursorTime={isPlaying ? sttTime : cursorTime}
             onChangeTime={(t) => jumpTo(t, false)}
             bins={7}
@@ -570,7 +484,7 @@ export default function EmotionOnlySynced({
         </div>
       </div>
 
-      {/* 🗣️ STT */}
+      {/* 🗣️ STT (전체 폭) — 헤더 라인에 현재 지배 감정 색 반영 */}
       <div className="min-w-0 md:col-span-2">
         <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="px-3 pt-3">

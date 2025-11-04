@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Modal from "../../components/Modal";
 import api from "../../utils/axiosInstance";           // axios 인스턴스 (401 처리 포함)
 import { useAuthStore } from "../../stores/authStore";
-import { useLogout } from "../../hooks/useAuth";
+import { useLogout } from "../../hooks/useAuth"; 
 
 const STORAGE_KEY = "ai-coach-profile";
 
@@ -35,14 +35,12 @@ function setProvisionalCount(interviewId, count) {
     const obj = getProvisionalCounts();
     obj[interviewId] = { count: Number(count) || 0, ts: Date.now() };
     localStorage.setItem(PROV_Q_KEY, JSON.stringify(obj));
-  } catch { }
+  } catch {}
 }
 function getProvisionalCountFor(interviewId) {
   const obj = getProvisionalCounts();
   return obj?.[interviewId]?.count ?? null;
 }
-
-
 
 const MyPage = () => {
   // ✅ AuthContext 제거 → Zustand로 대체
@@ -108,11 +106,6 @@ const MyPage = () => {
         }));
 
         const mapped = (data?.interviews || []).map((it) => {
-          console.log(
-            "🎯 interview_no:", it.interview_no,
-            "title:", it.interview_title,
-            "type:", it.interview_type
-          );
           const startedAt = Date.parse(it.interview_date); // 숫자(밀리초) 저장
           const rawStatus = it.analysis_status || "";
 
@@ -122,13 +115,13 @@ const MyPage = () => {
           const finalCount = questionCount > 0 ? questionCount : (provCount ?? 0);
 
           return {
-            id: it.interview_no,
+            id: String(it.interview_no),
             title: it.interview_title,
-            count: finalCount,
-            date: formatKST(it.interview_date),
-            startedAt,
-            kind: it.interview_type,
-            statusText: rawStatus,
+            count: finalCount,                   // 👈 서버 0이면 임시값으로 대체
+            date: formatKST(it.interview_date),  // 화면표기용(KST 문자열)
+            startedAt,                           // 계산용(숫자)
+            kind: it.interview_type,             // "실전 면접" | "모의 면접"
+            statusText: rawStatus,               // 원상태(표시 시점에 덮어씌움)
             statusTone: rawStatus?.includes("중") ? "blue" : "green",
           };
         });
@@ -272,8 +265,9 @@ const MyPage = () => {
                   <button
                     key={name}
                     onClick={() => setTab(name)}
-                    className={`px-3 py-1.5 rounded-lg border text-sm ${tab === name ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                      }`}
+                    className={`px-3 py-1.5 rounded-lg border text-sm ${
+                      tab === name ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
                   >
                     {name}
                   </button>
