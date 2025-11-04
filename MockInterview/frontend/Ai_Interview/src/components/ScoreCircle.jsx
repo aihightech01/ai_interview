@@ -1,6 +1,11 @@
 import React from "react";
 
-const ScoreCircle = ({ score = 75, id = "score-grad" }) => {
+const ScoreCircle = ({
+  score = 75,
+  id = "score-grad",
+  // ✅ 최소 수정: colors 기본값 추가
+  colors = { start: "#6366F1", end: "#60A5FA" },
+}) => {
   const radius = 40;
   const stroke = 8;
   const normalizedRadius = radius - stroke / 2;
@@ -33,8 +38,8 @@ const ScoreCircle = ({ score = 75, id = "score-grad" }) => {
         {/* 그라디언트 정의 (여러 인스턴스 대비 id 주입) */}
         <defs>
           <linearGradient id={id} x1="1" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#97d5ffff" />
-            <stop offset="100%" stopColor="#5171FF" />
+            <stop offset="0%" stopColor={colors.start} />
+            <stop offset="100%" stopColor={colors.end} />
           </linearGradient>
         </defs>
 
