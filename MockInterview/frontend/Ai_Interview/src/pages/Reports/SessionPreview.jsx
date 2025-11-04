@@ -1,4 +1,4 @@
-// src/pages/Reports/SessionPreview.jsx
+
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../../utils/axiosInstance";
@@ -17,9 +17,8 @@ function toPath(p) {
 /** Windows 로컬 경로 → 썸네일 서버 URL (네 환경에 맞게 호스트만 바꿔) */
 function buildThumbUrlFromLocalPath(localPath) {
   if (!localPath) return "";
-  // 예: GET /thumbnail?path=D%3A%5CinterviewVideos%5Cxxx.png
-  const host = "http://172.31.57.139:8080";
-  return `${host}/thumbnail?path=${encodeURIComponent(localPath)}`;
+
+  return   `http://172.31.57.139:8080/thumbnail?path=${encodeURIComponent(localPath)}`;
 }
 
 /** clip → 비디오 스트림 URL 생성 (API_PATHS가 제공되면 우선 사용) */

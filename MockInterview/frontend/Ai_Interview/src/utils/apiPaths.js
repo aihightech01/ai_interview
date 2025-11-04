@@ -40,7 +40,7 @@ export const API_PATHS = {
   },
 
   VIDEOS: {
-    STREAM: (videoNo) => `/videos/stream/${videoNo}`, // ✅ 상대 경로만
+    STREAM: (videoNo) => `/videos/stream/${videoNo}`, 
   },
 
 };
