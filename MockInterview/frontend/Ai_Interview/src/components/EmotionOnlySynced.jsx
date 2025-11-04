@@ -214,7 +214,7 @@ export default function EmotionOnlySynced({
           width = Math.max(0, svgRect.width - (MARGIN.left + MARGIN.right));
           height = Math.max(0, svgRect.height - (MARGIN.top + MARGIN.bottom));
         }
-      } catch {}
+      } catch { }
 
       setPlotRect({
         left: safeRound(left),
@@ -264,7 +264,7 @@ export default function EmotionOnlySynced({
       v.currentTime = clamped;
       if (playAfter) {
         const p = v.play?.();
-        if (p && typeof p.catch === "function") p.catch(() => {});
+        if (p && typeof p.catch === "function") p.catch(() => { });
       }
     }
     setCursorTime(clamped);
@@ -396,26 +396,15 @@ export default function EmotionOnlySynced({
               labelFormatter={(t) => `시간 ${fmt(Number(t))}`}
             />
             <Line
-              type="linear"
+              type="basis"
               dataKey="aes"
               name="AES"
               dot={false}
               isAnimationActive={false}
               stroke="#f59e0b"
-              strokeWidth={3}
+              strokeWidth={3.0}
             />
-            {showRaw && (
-              <Line
-                type="linear"
-                dataKey="rawScore"
-                name="원본 점수"
-                dot={false}
-                isAnimationActive={false}
-                stroke="#6366f1"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-              />
-            )}
+         
           </LineChart>
         </ResponsiveContainer>
       );
