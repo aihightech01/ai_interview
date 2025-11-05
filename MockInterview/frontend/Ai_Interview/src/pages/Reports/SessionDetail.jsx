@@ -69,7 +69,12 @@ function toVisionChartData(visionRaw, fps = 30) {
     let gazePitch = Number(d.gaze_pitch);
     let score = Number(d.score);
     // 라디안으로 올 수 있어 소각이면 도(deg)로 변환
-    if (Number.isFinite(gazeYaw) && Number.isFinite(gazePitch) && Math.abs(gazeYaw) < 3 && Math.abs(gazePitch) < 3) {
+    if (
+      Number.isFinite(gazeYaw) &&
+      Number.isFinite(gazePitch) &&
+      Math.abs(gazeYaw) < 3 &&
+      Math.abs(gazePitch) < 3
+    ) {
       gazeYaw *= RAD2DEG;
       gazePitch *= RAD2DEG;
     }
@@ -85,6 +90,32 @@ function toVisionChartData(visionRaw, fps = 30) {
   });
 }
 
+/** 아주 가벼운 마크다운 문자 제거(굵게/기울임/인라인코드/링크/이미지/헤더/리스트/인용문) */
+function stripMarkdown(md = "") {
+  let s = String(md);
+
+  // 이미지 ![alt](url) -> alt
+  s = s.replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1");
+  // 링크 [text](url) -> text
+  s = s.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  // 인라인 코드 `code` -> code
+  s = s.replace(/`([^`]+)`/g, "$1");
+  // 굵게/기울임 **text** *text* __text__ _text_ -> text
+  s = s.replace(/(\*\*|__)(.*?)\1/g, "$2").replace(/(\*|_)(.*?)\1/g, "$2");
+  // 헤더 #### Title -> Title
+  s = s.replace(/^\s{0,3}#{1,6}\s+/gm, "");
+  // 인용문 > text -> text
+  s = s.replace(/^\s{0,3}>\s?/gm, "");
+  // 리스트 -, *, +, 1. -> 본문만
+  s = s.replace(/^\s{0,3}([-*+])\s+/gm, "");
+  s = s.replace(/^\s{0,3}\d+\.\s+/gm, "");
+  // 이스케이프된 \n 복원
+  s = s.includes("\\n") && !s.includes("\n") ? s.replace(/\\n/g, "\n") : s;
+
+  // 남은 과도한 공백 정리
+  return s.replace(/[ \t]+\n/g, "\n").trim();
+}
+
 /* ───────────── UI 보조 컴포넌트 ───────────── */
 function SectionTitle({ children }) {
   return <h3 className="text-sm font-semibold text-gray-900">{children}</h3>;
@@ -98,8 +129,9 @@ function Pill({ children, color = "slate" }) {
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ring-1 ${map[color] || map.slate
-        }`}
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ring-1 ${
+        map[color] || map.slate
+      }`}
     >
       {children}
     </span>
@@ -114,7 +146,7 @@ function CopyButton({ text, className = "" }) {
           await navigator.clipboard.writeText(text || "");
           setCopied(true);
           setTimeout(() => setCopied(false), 1200);
-        } catch { }
+        } catch {}
       }}
       className={`h-8 px-3 rounded-md text-xs hover:bg-gray-50 ${className}`}
       title="복사"
@@ -219,6 +251,12 @@ export default function SessionDetail() {
   const emotionObj = useMemo(() => parseJSONDeep(analysis?.emotion, null), [analysis]);
   const answer = useMemo(() => safeParseJSON(analysis?.answer, {}) || {}, [analysis]);
   const emotionChartData = useMemo(() => toEmotionChartData(emotions, 30), [emotions]);
+
+  // 개선된 답변(마크다운 제거본)
+  const improvedAnswerPlain = React.useMemo(
+    () => stripMarkdown(answer?.improved_answer || ""),
+    [answer]
+  );
 
   // 점수 계산
   const score = useMemo(() => {
@@ -402,10 +440,11 @@ export default function SessionDetail() {
               <button
                 key={name}
                 onClick={() => setTab(name)}
-                className={`text-sm px-3 py-2 rounded-t-lg border-b-2 ${tab === name
+                className={`text-sm px-3 py-2 rounded-t-lg border-b-2 ${
+                  tab === name
                     ? "border-blue-600 text-blue-700"
                     : "border-transparent text-gray-600 hover:text-gray-800"
-                  }`}
+                }`}
               >
                 {name}
               </button>
@@ -429,7 +468,7 @@ export default function SessionDetail() {
 
               {tab === "감정 변화" && (
                 <EmotionOnlySynced
-                  emotionChartData={emotionObj ?? emotions}   // 객체 or 배열 둘 다 OK
+                  emotionChartData={emotionObj ?? emotions} // 객체 or 배열 둘 다 OK
                   videoUrl={videoUrl}
                   poster={thumbUrl}
                   sttSegments={sttSegments}
@@ -513,10 +552,10 @@ export default function SessionDetail() {
 
                       <div className="px-4 pb-4 pt-1">
                         <div className="rounded-md bg-gray-50/80 p-3 text-[13px] leading-relaxed text-gray-800 whitespace-pre-line">
-                          {answer?.improved_answer || "제공된 개선 답변이 없습니다."}
+                          {improvedAnswerPlain || "제공된 개선 답변이 없습니다."}
                         </div>
                         <div className="mt-2 flex items-center gap-2">
-                          <CopyButton text={answer?.improved_answer || ""} />
+                          <CopyButton text={improvedAnswerPlain} />
                         </div>
                       </div>
 

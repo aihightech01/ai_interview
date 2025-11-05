@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Modal from "../../components/Modal";
 import api from "../../utils/axiosInstance";           // axios 인스턴스 (401 처리 포함)
 import { useAuthStore } from "../../stores/authStore";
-import { useLogout } from "../../hooks/useAuth"; 
+import { useLogout } from "../../hooks/useAuth";
+import DefaultAvatar from "../../components/DefaultAvatar";
 
 const STORAGE_KEY = "ai-coach-profile";
 
@@ -52,7 +53,7 @@ const MyPage = () => {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState("실전 면접");
-  const [profile, setProfile] = useState({ name: "", email: "" });
+  const [profile, setProfile] = useState({ name: "", email: "", avatarUrl: "" });
 
   // 서버에서 받아온 인터뷰 리스트
   const [interviews, setInterviews] = useState([]);
@@ -77,6 +78,7 @@ const MyPage = () => {
     const base = {
       name: user?.name || user?.loginId || "",
       email: user?.email || "",
+      avatarUrl: user?.avatarUrl || "",   // Zustand user에 있으면 사용
     };
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -98,11 +100,12 @@ const MyPage = () => {
       setErr("");
       try {
         const { data } = await api.get("/user/profile");
-        // data: { name, email, interviews: [...] }
+        // data: { name, email, avatarUrl?, interviews: [...] }
         setProfile((prev) => ({
           ...prev,
           name: data?.name || prev.name,
           email: data?.email || prev.email,
+          avatarUrl: data?.avatarUrl || prev.avatarUrl,
         }));
 
         const mapped = (data?.interviews || []).map((it) => {
@@ -140,12 +143,6 @@ const MyPage = () => {
     if (isAuth) fetchProfile();
   }, [isAuth]);
 
-  // ✅ 현재 탭(실전/모의) 안에 질문 개수 0개 항목이 존재하는지 (안내문구 표시용)
-  const hasZeroCount = useMemo(
-    () => interviews.some((r) => r.kind === tab && (r.count ?? 0) === 0),
-    [interviews, tab]
-  );
-
   // ✅ 프론트에서 1시간 초과시 "분석 완료"로 강제 표기 + 질문 0개는 숨김
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -163,6 +160,29 @@ const MyPage = () => {
       })
       .filter((r) => r.kind === tab && (r.count ?? 0) > 0); // 질문 개수 0개는 표시하지 않음
   }, [interviews, tab]);
+
+  // 🔍 숨김(질문 0개) 항목은 콘솔로만 알림
+  useEffect(() => {
+    const hidden = interviews.filter((r) => r.kind === tab && (r.count ?? 0) === 0);
+    if (hidden.length > 0) {
+      console.log(
+        `[MyPage] 숨김 처리된 면접(질문 0개): count=${hidden.length}`,
+        hidden.map((h) => ({ id: h.id, title: h.title, kind: h.kind, date: h.date }))
+      );
+    }
+  }, [interviews, tab]);
+
+  // 이니셜 (아바타 대체)
+  const initials = useMemo(() => {
+    const base = (profile.name || profile.email || "U").trim();
+    if (!base) return "U";
+    const parts = base.split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    const first = base.slice(0, 2);
+    return /[A-Za-z]/.test(first) ? first.toUpperCase() : first;
+  }, [profile.name, profile.email]);
 
   const openEdit = () => {
     setEditProfile(profile);
@@ -198,6 +218,76 @@ const MyPage = () => {
     doLogout(); // 내부에서 clearAuth + queryClient.clear + /login 이동
   };
 
+  /* ───── 주(월~일) 단위 grouping ───── */
+
+  // 날짜/주 헬퍼들
+  function toDateObj(tsOrStr) {
+    return new Date(typeof tsOrStr === "number" ? tsOrStr : Date.parse(tsOrStr));
+  }
+  // 해당 날짜의 "주 시작(월요일 00:00)" 반환
+  function startOfWeekKST(d) {
+    const date = new Date(d);
+    const day = date.getDay(); // 0=일,1=월,...6=토
+    const diffToMonday = (day === 0 ? -6 : 1 - day); // 일요일이면 -6, 월=0, 화=-1 ...
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() + diffToMonday);
+    return start;
+  }
+  // "주 끝(일요일 23:59:59.999)" 반환
+  function endOfWeekKST(d) {
+    const start = startOfWeekKST(d);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }
+  function formatYMD(d) {
+    const y = d.getFullYear();
+    const m = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    return `${y}.${m}.${day}`;
+  }
+  // 그룹 key는 "주 시작일" 문자열로
+  function weekKeyOf(d) {
+    return formatYMD(startOfWeekKST(d));
+  }
+  function weekLabelOf(d) {
+    const s = startOfWeekKST(d);
+    const e = endOfWeekKST(d);
+    return `${formatYMD(s)} ~ ${formatYMD(e)}`;
+  }
+
+  // ✅ 주 단위 그룹
+  const weekGroups = useMemo(() => {
+    const map = new Map(); // key: "YYYY.MM.DD(월)" → items[]
+    filtered.forEach((it) => {
+      const basis = toDateObj(it.startedAt || it.date);
+      const key = weekKeyOf(basis);
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(it);
+    });
+
+    // 각 그룹 내부: 최신순 정렬
+    for (const [, arr] of map) {
+      arr.sort((a, b) => (b.startedAt || Date.parse(b.date)) - (a.startedAt || Date.parse(a.date)));
+    }
+
+    // 그룹 자체도 최신 주가 위로
+    const groups = [...map.entries()]
+      .sort((a, b) => Date.parse(b[0]) - Date.parse(a[0]))
+      .map(([key, items]) => {
+        const anyDate = toDateObj(items[0].startedAt || items[0].date);
+        return {
+          key,
+          label: weekLabelOf(anyDate),
+          items,
+        };
+      });
+
+    return groups;
+  }, [filtered]);
+
   return (
     <div className="min-h-screen bg-[#F7F8FA] flex flex-col">
       {/* Header */}
@@ -225,12 +315,20 @@ const MyPage = () => {
             {/* 프로필 카드 */}
             <section className="md:col-span-1 rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
               <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-full bg-gray-100 border" />
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{profile.name} 님</p>
-                  <p className="text-xs text-gray-500">{profile.email}</p>
+                {/* 아바타 (이미지 or 이니셜) */}
+                <div className="h-12 w-12 rounded-full overflow-hidden border border-gray-200 bg-gray-100 grid place-items-center">
+                  <DefaultAvatar size={48} className="text-gray-400" />
                 </div>
-                <button className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 hover:bg-gray-50" onClick={openEdit}>
+
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium text-gray-900">{profile.name || "이름 미설정"} 님</p>
+                  <p className="truncate text-xs text-gray-500">{profile.email || "—"}</p>
+                </div>
+
+                <button
+                  className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 hover:bg-gray-50"
+                  onClick={openEdit}
+                >
                   수정
                 </button>
               </div>
@@ -252,12 +350,7 @@ const MyPage = () => {
                 <h3 className="text-sm font-medium text-gray-700">
                   {tab} 분석 결과 <span className="text-blue-600">{filtered.length}</span>
                 </h3>
-                {/* ✅ 안내 문구: 현재 탭에 질문 0개 항목이 존재하면 표시 */}
-                {hasZeroCount && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    ※ 질문 개수가 없는 면접은 표시되지 않습니다.
-                  </p>
-                )}
+                {/* 안내 문구 제거(콘솔로만 노출) */}
               </div>
 
               <div className="flex items-center gap-2 text-sm">
@@ -275,46 +368,62 @@ const MyPage = () => {
               </div>
             </div>
 
-            {/* 테이블 */}
-            <div className="mt-4 rounded-2xl border border-gray-200 overflow-hidden">
+            {/* 주 단위 섹션 테이블 */}
+            <div className="mt-4 space-y-6">
               {loading ? (
                 <div className="py-16 text-center text-sm text-gray-500">불러오는 중…</div>
               ) : err ? (
                 <div className="py-16 text-center text-sm text-red-500">{err}</div>
-              ) : filtered.length === 0 ? (
+              ) : weekGroups.length === 0 ? (
                 <div className="py-16 text-center text-sm text-gray-500">표시할 항목이 없습니다.</div>
               ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500">
-                    <tr>
-                      <Th>면접 제목</Th>
-                      <Th className="w-24 text-center">질문 개수</Th>
-                      <Th className="w-28 text-center">분석 상태</Th>
-                      <Th className="w-24 text-center">면접 종류</Th>
-                      <Th className="w-40 text-right pr-6">면접 날짜</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((item) => (
-                      <tr
-                        key={item.id}
-                        className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-                        onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
-                      >
-                        <Td>
-                          <span className="text-blue-600 text-[11px] mr-2">{item.kind}</span>
-                          <span className="font-medium text-gray-900">Q. {item.title}</span>
-                        </Td>
-                        <Td className="text-center">{item.count}</Td>
-                        <Td className="text-center">
-                          <Badge tone={item.statusTone}>{item.statusText}</Badge>
-                        </Td>
-                        <Td className="text-center">{item.kind}</Td>
-                        <Td className="text-right pr-6 text-gray-600">{item.date}</Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                weekGroups.map((g) => (
+                  <section key={g.key} className="rounded-2xl border border-gray-200 overflow-hidden">
+                    {/* 주 헤더 */}
+                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 text-sm font-semibold text-gray-800">
+                      {g.label}
+                    </div>
+
+                    {/* 해당 주 테이블 */}
+                    <table className="w-full text-sm">
+                      <thead className="bg-white text-gray-500">
+                        <tr>
+                          <Th>면접 제목</Th>
+                          <Th className="w-24 text-center">질문 개수</Th>
+                          <Th className="w-28 text-center">분석 상태</Th>
+                          <Th className="w-24 text-center">면접 종류</Th>
+                          <Th className="w-40 text-right pr-6">면접 날짜</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {g.items.map((item) => (
+                          <tr
+                            key={item.id}
+                            className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
+                            onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
+                          >
+                            <Td>
+                              <span
+                                className={`text-[11px] mr-2 font-medium ${
+                                  item.kind === "실전 면접" ? "text-green-600" : "text-blue-600"
+                                }`}
+                              >
+                                {item.kind}
+                              </span>
+                              <span className="font-medium text-gray-900">Q. {item.title}</span>
+                            </Td>
+                            <Td className="text-center">{item.count}</Td>
+                            <Td className="text-center">
+                              <Badge tone={item.statusTone}>{item.statusText}</Badge>
+                            </Td>
+                            <Td className="text-center">{item.kind}</Td>
+                            <Td className="text-right pr-6 text-gray-600">{item.date}</Td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </section>
+                ))
               )}
             </div>
           </section>
