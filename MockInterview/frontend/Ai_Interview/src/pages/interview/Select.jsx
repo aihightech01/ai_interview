@@ -1,10 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import axiosInstance from "../../utils/axiosInstance";
 import { useMutation } from "@tanstack/react-query";
 import { useAuthStore } from "../../stores/authStore";
 import { toast } from "react-hot-toast";
+
+// ✅ 인터뷰 플로우 스토어 적용
+import { useInterviewStore, STEPS } from "../../stores/interviewStore";
 
 // ✅ 통일된 버튼 스타일
 const btn = (variant = "primary") => {
@@ -21,32 +24,42 @@ export default function Select() {
   const isAuth = !!token;
   const [loadingType, setLoadingType] = useState(null);
 
+  // ▼ Zustand 액션
+  const setInterviewNo = useInterviewStore((s) => s.setInterviewNo);
+  const setInterviewTypeMeta = useInterviewStore((s) => s.setInterviewTypeMeta);
+  const setStep = useInterviewStore((s) => s.setStep);
+  const hydrateFromSession = useInterviewStore((s) => s.hydrateFromSession);
+
+  // 새 탭/새로고침 진입 안정화
+  useEffect(() => {
+    hydrateFromSession();
+  }, [hydrateFromSession]);
+
   const startMutation = useMutation({
     mutationFn: async (interviewType) => {
       // interviewType: 1(실전) | 2(모의)
       const { data } = await axiosInstance.post("/interviews/start", { interviewType });
+      // onSuccess 두 번째 인자로 interviewType이 variables로 들어오니, 굳이 합치진 않아도 됨
       return data;
     },
     onMutate: (type) => setLoadingType(type),
     onSuccess: ({ interviewNo }, interviewType) => {
       if (interviewNo == null) throw new Error("인터뷰 번호를 받지 못했습니다.");
-      sessionStorage.setItem("interviewNo", String(interviewNo));
-      sessionStorage.setItem("interviewType", String(interviewType));
 
-      // 보기 좋은 라벨/키/색 저장
-      const LABEL = interviewType === 1 ? "실전 면접" : "모의 면접";
-      const KEY   = interviewType === 1 ? "REAL"     : "MOCK";
-      const COLOR = interviewType === 1 ? "emerald"  : "blue";
-      sessionStorage.setItem("interviewTypeLabel", LABEL);
-      sessionStorage.setItem("interviewTypeKey", KEY);
-      sessionStorage.setItem("interviewTypeColor", COLOR);
+      // ✅ 스토어에만 반영 (sessionStorage 직접 접근 제거)
+      setInterviewNo(interviewNo);
+      setInterviewTypeMeta({
+        type: interviewType,
+        label: interviewType === 1 ? "실전 면접" : "모의 면접",
+        color: interviewType === 1 ? "emerald" : "blue",
+      });
+      setStep(STEPS.UPLOAD);
 
-      // (옵션) 질문 유형 배열도 저장하고 싶다면 여기에 세팅
-      // 예: 실전면접은 기술/프로젝트/행동, 모의면접은 자유·행동 정도로 가정
-      const defaultTypes = interviewType === 1
-        ? ["TECHNICAL", "PROJECT", "BEHAVIORAL"]
-        : ["FREE", "BEHAVIORAL"];
-      sessionStorage.setItem("questionTypes", JSON.stringify(defaultTypes));
+      // ❌ questionTypes 저장/전파는 요구에 따라 제거
+      // (기존 sessionStorage.setItem("questionTypes", ...) 삭제)
+
+      // 필요하다면 레거시 호환 키 최소만 남기기 (선택)
+      // try { sessionStorage.setItem("interviewTypeKey", interviewType === 1 ? "REAL" : "MOCK"); } catch {}
 
       nav("/interview/resume");
     },

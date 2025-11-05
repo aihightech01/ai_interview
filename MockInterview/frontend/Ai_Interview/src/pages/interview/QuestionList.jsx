@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 
 import { splitNumberedQuestions } from "../../utils/helper";
-import { useInterviewStore } from "../../stores/interviewStore"; // ✅ 제목은 스토어 우선
+import { useInterviewStore } from "../../stores/interviewStore"; // ✅ 스토어 사용
 
 const TABS = [
   { key: "COMMON", label: "공통 면접 질문" },
@@ -66,15 +66,22 @@ function pillCls(color = "gray") {
 export default function QuestionListPage() {
   const nav = useNavigate();
 
-  // ✅ 인터뷰 제목: 스토어 우선, 없으면 세션 보조
-  const storeTitle = useInterviewStore((s) => s.title);
-  const setStoreTitle = useInterviewStore((s) => s.setTitle);
-  const [interviewTitle, setInterviewTitle] = useState("");
+  // ✅ 스토어 값/액션
+  const isHydrated           = useInterviewStore((s) => s.isHydrated);
+  const hydrateFromSession   = useInterviewStore((s) => s.hydrateFromSession);
 
-  // 인터뷰 유형(실전/모의) — 현재는 sessionStorage에서 로드
-  const [interviewType, setInterviewType] = useState(null);             // 1 | 2
-  const [interviewTypeLabel, setInterviewTypeLabel] = useState("");     // "실전 면접" | "모의 면접"
-  const [interviewTypeColor, setInterviewTypeColor] = useState("blue"); // "emerald" | "blue"
+  const interviewNo          = useInterviewStore((s) => s.interviewNo);
+  const storeTitle           = useInterviewStore((s) => s.title);
+  const interviewType        = useInterviewStore((s) => s.interviewType);
+  const interviewTypeLabel   = useInterviewStore((s) => s.interviewTypeLabel);
+  const interviewTypeColor   = useInterviewStore((s) => s.interviewTypeColor);
+
+  const setSelectedQuestions = useInterviewStore((s) => s.setSelectedQuestions);
+  const setStep              = useInterviewStore((s) => s.setStep);
+  const setStoreTitle        = useInterviewStore((s) => s.setTitle);
+
+  // UI 표시용 로컬
+  const [interviewTitle, setInterviewTitle] = useState("");
 
   // 전체 질문(탭 필터용)
   const [allQuestions, setAllQuestions] = useState([]); // [{questionId,text,source,createdAt?}]
@@ -96,27 +103,24 @@ export default function QuestionListPage() {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [previewText]);
 
-  // 세션 정보 로드 (제목/유형)
+  /* -------------------- 세션 → 스토어 하이데이트 & 가드 -------------------- */
   useEffect(() => {
-    // ✅ 제목: 스토어 → 세션 순으로 로드
+    hydrateFromSession();
+  }, [hydrateFromSession]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!interviewNo) {
+      alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해주세요.");
+      nav("/interview/select");
+      return;
+    }
+    // 제목은 스토어 우선, 없으면 세션에서
     const ssTitle = sessionStorage.getItem("interviewTitle") || "";
     const finalTitle = storeTitle?.trim() || ssTitle;
     setInterviewTitle(finalTitle);
-    if (!storeTitle && ssTitle) setStoreTitle(ssTitle); // 스토어 비어있다면 동기화
-
-    // 유형은 기존 로직 유지 (필요시 store로 확장)
-    const typeStr = sessionStorage.getItem("interviewType");
-    if (typeStr) {
-      const t = Number(typeStr);
-      setInterviewType(t);
-      setInterviewTypeLabel(
-        sessionStorage.getItem("interviewTypeLabel") || (t === 1 ? "실전 면접" : "모의 면접")
-      );
-      setInterviewTypeColor(
-        sessionStorage.getItem("interviewTypeColor") || (t === 1 ? "emerald" : "blue")
-      );
-    }
-  }, [storeTitle, setStoreTitle]);
+    if (!storeTitle && ssTitle) setStoreTitle(ssTitle);
+  }, [isHydrated, interviewNo, storeTitle, setStoreTitle, nav]);
 
   // 공통 함수: 배열 응답 정규화 (항목 내부가 번호 묶음이면 분해)
   const normalizeFromArray = (arr) => {
@@ -132,7 +136,7 @@ export default function QuestionListPage() {
           out.push({
             questionId: `${idBase}-${p.id}`,
             text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
-            source, // COMMON/RESUME 등
+            source, // COMMON/RESUME/CUSTOM
             createdAt: d?.createdAt ?? null, // 있으면 유지
           });
         });
@@ -150,6 +154,8 @@ export default function QuestionListPage() {
 
   // 1) 질문 목록 조회 — COMMON/RESUME 모두 채우기 + 보강 호출
   useEffect(() => {
+    if (!isHydrated || !interviewNo) return;
+
     let ignore = false;
 
     (async () => {
@@ -161,7 +167,7 @@ export default function QuestionListPage() {
         let normalized = [];
 
         if (Array.isArray(data)) {
-          // ✅ 배열이면 각 항목의 questionType으로 COMMON/RESUME 분류 + 내부 묶음 분해
+          // ✅ 배열이면 각 항목의 questionType으로 COMMON/RESUME/CUSTOM 분류 + 내부 묶음 분해
           normalized = normalizeFromArray(data);
         } else if (Array.isArray(data?.items)) {
           normalized = normalizeFromArray(data.items);
@@ -234,11 +240,9 @@ export default function QuestionListPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [isHydrated, interviewNo]);
 
-  /* === 현재 탭 리스트(표시용 최신순 정렬) ===
-     createdAt(있으면 우선) 또는 questionId의 epoch-like 숫자를 사용해 최신 → 오래된 순으로만 '표시용' 정렬.
-     타임스탬프가 전혀 없으면 기존 상대 순서를 유지(안정 정렬). */
+  /* === 현재 탭 리스트(표시용 최신순 정렬) === */
   const currentList = useMemo(() => {
     const list = allQuestions.filter((q) => q.source === tab);
     const indexMap = new Map();
@@ -308,19 +312,34 @@ export default function QuestionListPage() {
   // 3) 면접 시작
   function onStart() {
     if (selected.length === 0) return;
-    const interviewNo = sessionStorage.getItem("interviewNo");
     if (!interviewNo) {
       alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해주세요.");
       nav("/interview/select");
       return;
     }
+
+    // 서버/세션용 페이로드
     const payload = selected.map((s) => ({
       questionNO: s.questionId,
       questionId: s.questionId,
       questionContent: s.text,
-      questionType: s.source,
+      questionType: s.source, // COMMON/RESUME/CUSTOM
     }));
+
+    // ✅ 스토어에도 확정 반영 (앱 전역 재사용)
+    setSelectedQuestions(
+      selected.map((s) => ({
+        questionId: s.questionId,
+        text: s.text,
+        questionType: s.source, // 스토어에도 타입 보존
+        source: s.source,
+      }))
+    );
+    setStep("DEVICES");
+
+    // (선택) 세션 미러링 유지
     sessionStorage.setItem("selectedQuestions", JSON.stringify(payload));
+
     nav("/interview/devices", { state: { interviewNo } });
   }
 
@@ -329,9 +348,7 @@ export default function QuestionListPage() {
   // 리스트 패널 (그레이 테두리 & 모던)
   const ListPanel = (
     <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
-      <div className="px-6 pt-5 pb-2 text-xs text-gray-500">
-        선택 가능: 최대 3개
-      </div>
+      <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
       <div className="px-6 pb-6">
         <div className="border border-gray-200 rounded-lg overflow-hidden">
           <ul className="divide-y divide-gray-100">
@@ -501,7 +518,7 @@ export default function QuestionListPage() {
           {/* 상단: 제목 + 유형 뱃지 (그레이 테두리, 모던) */}
           <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
             <div className="p-6 flex items-center justify-between gap-4">
-              {/* 제목 + 전페이지 입력한 인터뷰 제목을 나란히 표시 */}
+              {/* 제목 + 입력한 인터뷰 제목을 나란히 표시 */}
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-lg font-semibold text-gray-900">인터뷰 질문 선택</h1>
                 {interviewTitle && (
@@ -518,7 +535,7 @@ export default function QuestionListPage() {
                 </p>
               </div>
 
-              {/* 우측: 실전/모의 태그 */}
+              {/* 우측: 실전/모의 태그 — 스토어 값 사용 */}
               {interviewType && (
                 <div className="flex items-center gap-2">
                   <span className={chipCls(interviewTypeColor)}>{interviewTypeLabel}</span>

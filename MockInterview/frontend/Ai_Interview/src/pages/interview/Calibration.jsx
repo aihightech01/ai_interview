@@ -1,14 +1,18 @@
 // src/pages/interview/Calibration.jsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-import Footer from "../../components/Footer";
+// Footer는 필요시 사용
+// import Footer from "../../components/Footer";
+import { useInterviewStore, STEPS } from "../../stores/interviewStore";
 
+/* ====== 상수 ====== */
 const NEXT_BASE = "/interview/run";
-const CALIB_OVERLAY_DELAY_MS = 3000;
-const RECORD_DURATION_MS = 3000;
+const CALIB_OVERLAY_DELAY_MS = 3000;   // '시작하기' 누르고 3초 후 오버레이
+const RECORD_DURATION_MS = 3000;       // 캘리브레이션 샘플 3초 녹화
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://172.31.57.139:8080").replace(/\/+$/, "");
 
+/* ====== MediaRecorder 지원 체크 ====== */
 function isTypeSupported(type) {
   try {
     return typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type);
@@ -18,20 +22,21 @@ function isTypeSupported(type) {
 }
 const FALLBACK_WEBM_VP9 = "video/webm; codecs=vp9";
 const FALLBACK_WEBM_VP8 = "video/webm; codecs=vp8";
-const FALLBACK_WEBM = "video/webm";
+const FALLBACK_WEBM     = "video/webm";
 
+/* ====== 유틸 ====== */
 const GUIDE = [
   "얼굴을 중앙에 맞추고 눈높이를 수평으로 맞추세요.",
   "답변할 때는 화면이 아닌 카메라 렌즈를 바라보세요.",
   "주변 소음을 줄이고 마이크를 너무 멀리 두지 마세요.",
   "정면의 부드러운 조명, 역광·복잡한 배경은 피하세요.",
-  "시작하기 버튼 클릭 후 3초 지난후 면접 버튼 활성화",
+  "시작하기 버튼 클릭 후 3초 지난 후 면접 버튼 활성화",
 ];
 
 const mimeToExt = (mime = "video/webm") => {
   const m = (mime || "").toLowerCase();
   if (m.includes("webm")) return "webm";
-  if (m.includes("mp4")) return "mp4";
+  if (m.includes("mp4"))  return "mp4";
   return "webm";
 };
 const joinUrl = (base, path) =>
@@ -55,21 +60,52 @@ async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
 }
 
 export default function Calibration() {
-  const navigate = useNavigate();
-  const { state } = useLocation();
-  const interviewNo = state?.interviewNo ?? null;
+  const nav = useNavigate();
 
+  /* ====== 스토어: 세션 → 스토어 하이드레이트 & 메타 표시 ====== */
+  const isHydrated         = useInterviewStore((s) => s.isHydrated);
+  const hydrateFromSession = useInterviewStore((s) => s.hydrateFromSession);
+  const interviewNo        = useInterviewStore((s) => s.interviewNo);
+  const interviewTitle     = useInterviewStore((s) => s.title);
+  const interviewType      = useInterviewStore((s) => s.interviewType);
+  const interviewTypeLabel = useInterviewStore((s) => s.interviewTypeLabel);
+  const interviewTypeColor = useInterviewStore((s) => s.interviewTypeColor);
+  const setStep            = useInterviewStore((s) => s.setStep);
+
+  // 진입 시 세션 하이드레이트 + 단계 표시
+  useEffect(() => {
+    hydrateFromSession();
+    setStep(STEPS.CALIB);
+  }, [hydrateFromSession, setStep]);
+
+  // HTTPS 가드 & 인터뷰 번호 가드
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    const isSecure = window.isSecureContext || location.protocol === "https:";
+    if (!isSecure && location.hostname !== "localhost") {
+      alert("카메라/마이크 접근은 HTTPS 환경에서만 안정적으로 작동합니다.");
+    }
+
+    if (!interviewNo) {
+      alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해 주세요.");
+      nav("/interview/select");
+    }
+  }, [isHydrated, interviewNo, nav]);
+
+  /* ====== 상태/레퍼런스 ====== */
   const [calibStarted, setCalibStarted] = useState(false);
   const [calibCooling, setCalibCooling] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
-  const [showOverlay, setShowOverlay] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
+  const [showOverlay, setShowOverlay]   = useState(false);
+  const [isRecording, setIsRecording]   = useState(false);
 
   const videoRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const mediaRecorderRef = useRef(null);
-  const recordedTypeRef = useRef("");
+  const mediaRecorderRef   = useRef(null);
+  const recordedTypeRef    = useRef("");
 
+  /* ====== 미디어 준비 ====== */
   const getMediaPermission = useCallback(async () => {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
     setStream(s);
@@ -77,12 +113,14 @@ export default function Calibration() {
     return s;
   }, []);
 
+  // 정리
   useEffect(() => {
     return () => {
       if (stream) stream.getTracks().forEach((t) => t.stop());
     };
   }, [stream]);
 
+  // 비디오 엘리먼트에 스트림 연결
   useEffect(() => {
     if (!stream) return;
     const v = videoRef.current;
@@ -92,6 +130,7 @@ export default function Calibration() {
     v.play?.().catch(() => {});
   }, [stream]);
 
+  /* ====== 캘리브레이션 흐름 ====== */
   const onCalibrationStart = async () => {
     try {
       setCalibStarted(true);
@@ -135,6 +174,7 @@ export default function Calibration() {
         throw new Error("이 브라우저는 MediaRecorder를 지원하지 않습니다.");
       }
 
+      // 우선순위로 코덱 선택
       const tryTypes = [FALLBACK_WEBM_VP9, FALLBACK_WEBM_VP8, FALLBACK_WEBM];
       let rec = null;
       let usedType = "";
@@ -161,7 +201,10 @@ export default function Calibration() {
           const type = recordedTypeRef.current || chunks[0]?.type || "video/webm";
           const merged = new Blob(chunks, { type });
           await uploadCalibration(interviewNo, merged, type);
-          navigate(`${NEXT_BASE}/${interviewNo}`, { state: { interviewNo } });
+
+          // 다음 단계로 전환
+          useInterviewStore.getState().setStep(STEPS.INTERVIEW);
+          nav(`${NEXT_BASE}/${interviewNo}`);  // state 전달 불필요: 스토어에서 읽음
         } catch (e) {
           console.error(e);
           alert(`업로드 오류: ${e.message ?? ""}`);
@@ -183,18 +226,39 @@ export default function Calibration() {
 
   const startDisabled = calibCooling || !calibStarted || isRecording || !interviewNo;
 
+  /* ====== UI ====== */
   return (
     <div className="min-h-screen bg-[#F7FAFC] flex flex-col">
       <Header />
       <main className="flex-1">
         <div className="mx-auto w-full max-w-6xl px-4 py-8">
+          {/* 상단 헤더 라인: 제목/유형/세션 */}
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-semibold">캘리브레이션</h1>
-            {!interviewNo && (
-              <span className="text-sm text-rose-600">
-                인터뷰 번호(interviewNo)가 없습니다. 이전 단계에서 세션을 생성해주세요.
-              </span>
-            )}
+
+            <div className="flex items-center gap-2 text-xs">
+              {interviewTitle && (
+                <span className="text-slate-500">
+                  제목: <b className="text-slate-800">{interviewTitle}</b>
+                </span>
+              )}
+              {interviewType && (
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${
+                    interviewTypeColor === "emerald"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-blue-200 bg-blue-50 text-blue-700"
+                  }`}
+                >
+                  {interviewTypeLabel}
+                </span>
+              )}
+              {!interviewNo && (
+                <span className="text-sm text-rose-600">
+                  인터뷰 번호(interviewNo)가 없습니다. 이전 단계에서 세션을 생성해주세요.
+                </span>
+              )}
+            </div>
           </div>
 
           {/* 좌우 칸 정렬 */}
@@ -230,6 +294,7 @@ export default function Calibration() {
                     />
                   </div>
 
+                  {/* 중앙 원형 가이드 */}
                   {!showOverlay && (
                     <div className="pointer-events-none absolute inset-0 grid place-items-center z-20">
                       <div className="relative w-[260px] h-[260px] rounded-full border-2 border-white/70">
@@ -243,6 +308,7 @@ export default function Calibration() {
                     </div>
                   )}
 
+                  {/* 오버레이: 면접 시작 안내 */}
                   {showOverlay && (
                     <div className="absolute inset-0 bg-black/65 grid place-items-center rounded-xl z-30">
                       <div className="text-center text-white">
@@ -261,10 +327,9 @@ export default function Calibration() {
               </div>
             </div>
 
-            {/* 오른쪽: 안내(위) + 시작(아래) 분리 */}
+            {/* 오른쪽: 안내 + 시작 버튼 */}
             <div className="col-span-12 lg:col-span-5">
               <div className="h-full flex flex-col gap-5">
-                {/* 안내 카드 — 좌측과 높이 맞추기 위해 flex-1 */}
                 <div className="flex-1 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   <h3 className="font-semibold mb-3">캘리브레이션 안내</h3>
                   <ul className="list-disc pl-5 space-y-2 text-sm text-slate-700">
@@ -274,7 +339,6 @@ export default function Calibration() {
                   </ul>
                 </div>
 
-                {/* 버튼 카드 — 분리 */}
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                   <div className="text-xs text-slate-500 mb-2">완료 준비</div>
                   <p className="text-sm text-slate-600 mb-4">
@@ -302,8 +366,7 @@ export default function Calibration() {
           </div>
         </div>
       </main>
-
-
+      {/* <Footer /> */}
     </div>
   );
 }

@@ -1,13 +1,23 @@
+// src/pages/interview/DeviceTest.jsx
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { createMicMeter } from "../../utils/media";
 import Header from "../../components/Header";
 import Footer from "../../components/Footer";
+import { useInterviewStore } from "../../stores/interviewStore";
 
 export default function DeviceTest() {
   const nav = useNavigate();
-  const { state } = useLocation();
-  const interviewNo = state?.interviewNo; // 이전 단계에서 전달
+
+  // ====== 인터뷰 스토어 ======
+  const isHydrated         = useInterviewStore((s) => s.isHydrated);
+  const hydrateFromSession = useInterviewStore((s) => s.hydrateFromSession);
+  const interviewNo        = useInterviewStore((s) => s.interviewNo);
+  const interviewTitle     = useInterviewStore((s) => s.title);
+  const interviewType      = useInterviewStore((s) => s.interviewType);
+  const interviewTypeLabel = useInterviewStore((s) => s.interviewTypeLabel);
+  const interviewTypeColor = useInterviewStore((s) => s.interviewTypeColor);
+  const setStep            = useInterviewStore((s) => s.setStep);
 
   // refs
   const videoRef = useRef(null);
@@ -24,13 +34,33 @@ export default function DeviceTest() {
   const [everPassed, setEverPassed] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // 🔹 추가: 민감도 조절 및 색상 헬퍼
+  // 🔹 마이크 게이지
   const [gain] = useState(300);
   const rmsToPercent = (rms, g = 300) => Math.max(0, Math.min(100, Math.round(rms * g)));
   const levelColor = (p) => (p < 25 ? "#94a3b8" : p < 60 ? "#f59e0b" : "#ef4444");
 
-  // ───────────────────────────────────────────────
-  // 장치 나열
+  /* ================= 세션 → 스토어 하이드레이트 & 가드 ================ */
+  useEffect(() => {
+    hydrateFromSession();
+  }, [hydrateFromSession]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    // HTTPS 가드 (localhost는 예외)
+    const isSecure = window.isSecureContext || location.protocol === "https:";
+    if (!isSecure && location.hostname !== "localhost") {
+      alert("카메라/마이크 접근은 HTTPS 환경에서만 안정적으로 작동합니다.");
+    }
+
+    if (!interviewNo) {
+      alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해주세요.");
+      nav("/interview/select");
+      return;
+    }
+  }, [isHydrated, interviewNo, nav]);
+
+  /* =================== 디바이스 & 스트림 =================== */
   async function refreshDevices() {
     try {
       const list = await navigator.mediaDevices.enumerateDevices();
@@ -47,7 +77,6 @@ export default function DeviceTest() {
     }
   }
 
-  // 스트림 시작
   const startStream = async ({ camId, micId }) => {
     setBusy(true);
     stopMeterRef.current?.();
@@ -71,7 +100,7 @@ export default function DeviceTest() {
 
       // 마이크 레벨
       stopMeterRef.current = createMicMeter(stream, (rms) => {
-        const visual = Math.max(0, rms - 0.005); // 살짝 보정해 시각적 반응 강화
+        const visual = Math.max(0, rms - 0.005);
         setLevel(visual);
         setOk((o) => ({ ...o, mic: rms > 0.02 }));
       });
@@ -110,6 +139,7 @@ export default function DeviceTest() {
     if (selected.camId || selected.micId) {
       startStream(selected);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected.camId, selected.micId]);
 
   const canProceed = ok.cam && ok.mic && ok.spk && ok.perm;
@@ -127,9 +157,13 @@ export default function DeviceTest() {
     setOk((o) => ({ ...o, spk: true }));
   };
 
-  const goCalibration = () => nav("/interview/calibration", { state: { interviewNo } });
+  const goCalibration = () => {
+    // 스토어 단계 진행
+    setStep("CALIB");
+    nav("/interview/calibration"); // interviewNo는 스토어에 있으므로 state 불필요
+  };
 
-  // ───────────────────────────────────────────────
+  /* =================== UI =================== */
   return (
     <div className="min-h-screen w-full bg-[#F7FAFC] flex flex-col">
       <Header />
@@ -139,11 +173,27 @@ export default function DeviceTest() {
           <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
             <div className="p-5 flex items-center justify-between">
               <h1 className="text-lg font-semibold text-gray-900">기기 테스트</h1>
-              {!interviewNo && (
-                <span className="text-xs text-rose-600">
-                  인터뷰 번호가 없습니다. 이전 단계에서 세션을 생성해주세요.
-                </span>
-              )}
+              <div className="flex items-center gap-2 text-xs">
+                {interviewTitle && (
+                  <span className="text-slate-500">
+                    제목: <b className="text-slate-800">{interviewTitle}</b>
+                  </span>
+                )}
+                {interviewType && (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${
+                      interviewTypeColor === "emerald"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-blue-200 bg-blue-50 text-blue-700"
+                    }`}
+                  >
+                    {interviewTypeLabel}
+                  </span>
+                )}
+                {!interviewNo && (
+                  <span className="text-rose-600">인터뷰 번호가 없습니다. 다시 시작해주세요.</span>
+                )}
+              </div>
             </div>
           </section>
 
@@ -157,7 +207,7 @@ export default function DeviceTest() {
                 </div>
               </div>
 
-              {/* ✅ 시각 강화된 마이크 게이지 */}
+              {/* 마이크 게이지 */}
               <div>
                 <div className="text-sm text-slate-700 mb-2">마이크 입력</div>
                 <div className="h-3 rounded-full bg-slate-200 overflow-hidden">
