@@ -24,6 +24,11 @@ export default defineConfig({
         target: "http://172.31.57.139:8080",
         changeOrigin: true,
       },
+
+      "/thumbnail": {
+        target: "http://172.31.57.139:8080",
+        changeOrigin: true,
+      },
       // 만약 실제가 /interviewVideos/... 라면 이렇게:
       // "/interviewVideos": {
       //   target: "http://172.31.57.139:8080",

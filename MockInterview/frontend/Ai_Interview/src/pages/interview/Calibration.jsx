@@ -2,8 +2,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-
 import { useInterviewStore, STEPS } from "../../stores/interviewStore";
+import { useMutation } from "@tanstack/react-query"; // ✅ 추가
 
 /* ====== 상수 ====== */
 const NEXT_BASE = "/interview/run";
@@ -41,7 +41,8 @@ const mimeToExt = (mime = "video/webm") => {
 const joinUrl = (base, path) =>
   `${base.replace(/\/+$/, "")}/${String(path || "").replace(/^\/+/, "")}`;
 
-async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
+/** 서버 업로드 I/O (fetch 버전) */
+async function uploadCalibration(interviewNo, blob, mimeType = "video/webm", signal) {
   if (!interviewNo) throw new Error("interviewNo가 없습니다.");
   const ext = mimeToExt(mimeType);
   const filename = `calibration_${Date.now()}.${ext}`;
@@ -50,7 +51,7 @@ async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
 
   const url = joinUrl(API_BASE, `/api/interviews/${interviewNo}/calibration`);
 
-  const res = await fetch(url, { method: "POST", body: form });
+  const res = await fetch(url, { method: "POST", body: form, signal });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`업로드 실패 (HTTP ${res.status}) ${text}`);
@@ -63,7 +64,7 @@ async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
 export default function Calibration() {
   const nav = useNavigate();
 
-  /* ====== 스토어: 세션 → 스토어 하이드레이트 & 메타 표시 ====== */
+  /* ====== 스토어: 세션 → 스토어 하이드레이트 & 단계 표시 ====== */
   const isHydrated = useInterviewStore((s) => s.isHydrated);
   const hydrateFromSession = useInterviewStore((s) => s.hydrateFromSession);
   const interviewNo = useInterviewStore((s) => s.interviewNo);
@@ -106,6 +107,30 @@ export default function Calibration() {
   const mediaRecorderRef = useRef(null);
   const recordedTypeRef = useRef("");
 
+  // 업로드 취소용 AbortController (옵션)
+  const abortRef = useRef(null);
+
+  /* ====== React Query: 업로드 Mutation ====== */
+  const { mutate: mutateUpload, isPending: isUploading } = useMutation({
+    mutationFn: async ({ interviewNo, blob, mimeType }) => {
+      // 새 업로드 시작 시 이전 abort
+      if (abortRef.current) abortRef.current.abort();
+      abortRef.current = new AbortController();
+      return uploadCalibration(interviewNo, blob, mimeType, abortRef.current.signal);
+    },
+    onSuccess: () => {
+      // 다음 단계로 전환
+      useInterviewStore.getState().setStep(STEPS.INTERVIEW);
+      nav(`${NEXT_BASE}/${interviewNo}`); // 스토어에서 읽으므로 state 전달 불필요
+    },
+    onError: (e) => {
+      alert(`업로드 오류: ${e?.message ?? "알 수 없는 오류"}`);
+    },
+    onSettled: () => {
+      setIsRecording(false);
+    },
+  });
+
   /* ====== 미디어 준비 ====== */
   const getMediaPermission = useCallback(async () => {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -118,6 +143,7 @@ export default function Calibration() {
   useEffect(() => {
     return () => {
       if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (abortRef.current) abortRef.current.abort();
     };
   }, [stream]);
 
@@ -128,7 +154,7 @@ export default function Calibration() {
     if (!v) return;
     if (v.srcObject !== stream) v.srcObject = stream;
     v.muted = true;
-    v.play?.().catch(() => { });
+    v.play?.().catch(() => {});
   }, [stream]);
 
   /* ====== 캘리브레이션 흐름 ====== */
@@ -162,7 +188,7 @@ export default function Calibration() {
   };
 
   const onClickStartInterview = async () => {
-    if (calibCooling || !calibStarted || isRecording) return;
+    if (calibCooling || !calibStarted || isRecording || isUploading) return;
     try {
       if (!interviewNo) {
         alert("interviewNo가 없습니다. 이전 단계에서 세션을 생성하고 다시 시도하세요.");
@@ -201,15 +227,12 @@ export default function Calibration() {
         try {
           const type = recordedTypeRef.current || chunks[0]?.type || "video/webm";
           const merged = new Blob(chunks, { type });
-          await uploadCalibration(interviewNo, merged, type);
 
-          // 다음 단계로 전환
-          useInterviewStore.getState().setStep(STEPS.INTERVIEW);
-          nav(`${NEXT_BASE}/${interviewNo}`);  // state 전달 불필요: 스토어에서 읽음
+          // ✅ 여기서 React Query mutation 사용
+          mutateUpload({ interviewNo, blob: merged, mimeType: type });
         } catch (e) {
           console.error(e);
           alert(`업로드 오류: ${e.message ?? ""}`);
-        } finally {
           setIsRecording(false);
         }
       };
@@ -225,7 +248,8 @@ export default function Calibration() {
     }
   };
 
-  const startDisabled = calibCooling || !calibStarted || isRecording || !interviewNo;
+  const startDisabled =
+    calibCooling || !calibStarted || isRecording || !interviewNo || isUploading;
 
   /* ====== UI ====== */
   return (
@@ -245,10 +269,11 @@ export default function Calibration() {
               )}
               {interviewType && (
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${interviewTypeColor === "emerald"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                    : "border-blue-200 bg-blue-50 text-blue-700"
-                    }`}
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${
+                    interviewTypeColor === "emerald"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                      : "border-blue-200 bg-blue-50 text-blue-700"
+                  }`}
                 >
                   {interviewTypeLabel}
                 </span>
@@ -271,13 +296,16 @@ export default function Calibration() {
                   <button
                     onClick={onCalibrationStart}
                     disabled={calibCooling}
-                    className={`h-9 px-3 rounded-lg text-sm ${calibCooling
-                      ? "bg-slate-200 text-slate-500"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
-                      }`}
+                    className={`h-9 px-3 rounded-lg text-sm ${
+                      calibCooling
+                        ? "bg-slate-200 text-slate-500"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
                   >
                     {calibStarted
-                      ? (calibCooling ? `준비 중… ${cooldownLeft}s` : "다시 맞추기")
+                      ? calibCooling
+                        ? `준비 중… ${cooldownLeft}s`
+                        : "다시 맞추기"
                       : "시작하기"}
                   </button>
                 </div>
@@ -319,8 +347,12 @@ export default function Calibration() {
                 </div>
 
                 <div className="mt-3 text-xs text-slate-500">
-                  {calibStarted
-                    ? (calibCooling ? "캘리브레이션: 준비 중…" : "캘리브레이션: 준비 완료")
+                  {isUploading
+                    ? "업로드 중…"
+                    : calibStarted
+                    ? calibCooling
+                      ? "캘리브레이션: 준비 중…"
+                      : "캘리브레이션: 준비 완료"
                     : "캘리브레이션: 대기"}
                 </div>
               </div>
@@ -346,17 +378,20 @@ export default function Calibration() {
                   <button
                     onClick={onClickStartInterview}
                     disabled={startDisabled}
-                    className={`h-10 px-4 rounded-lg w-full text-sm ${!startDisabled
-                      ? "bg-blue-600 text-white hover:bg-blue-700"
-                      : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                      }`}
+                    className={`h-10 px-4 rounded-lg w-full text-sm ${
+                      !startDisabled
+                        ? "bg-blue-600 text-white hover:bg-blue-700"
+                        : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                    }`}
                     title={
                       !interviewNo
                         ? "세션 생성 후 다시 시도하세요."
-                        : (calibCooling || !calibStarted ? "캘리브레이션 후 진행 가능합니다." : "")
+                        : calibCooling || !calibStarted
+                        ? "캘리브레이션 후 진행 가능합니다."
+                        : ""
                     }
                   >
-                    {isRecording ? "업로드 중..." : "면접 시작"}
+                    {isRecording || isUploading ? "업로드 중..." : "면접 시작"}
                   </button>
                 </div>
               </div>
@@ -364,7 +399,6 @@ export default function Calibration() {
           </div>
         </div>
       </main>
-
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
 import { useAuthStore } from "../../stores/authStore";
 import { motion, useReducedMotion } from "framer-motion";
-import { useInterviewStore } from "../../stores/interviewStore";
 
 export default function ResumeUploadPage() {
   const nav = useNavigate();
@@ -26,33 +25,38 @@ export default function ResumeUploadPage() {
   const [text, setText] = useState("");
   const [file, setFile] = useState(null);
 
-  // ✅ 인터뷰 메타를 스토어에서 바로 사용
-  const {
-    interviewNo,
-    interviewType,
-    interviewTypeLabel,
-    interviewTypeColor,
-    isHydrated,
-    hydrateFromSession,
-  } = useInterviewStore();
+  const [interviewNo, setInterviewNo] = useState("");
 
   // 로딩 상태
   const [loading, setLoading] = useState(false);
   const prefersReducedMotion = useReducedMotion();
 
-  // 세션 → 스토어 복원
-  useEffect(() => {
-    hydrateFromSession();
-  }, [hydrateFromSession]);
+  // UI용 면접 유형 표시
+  const [interviewType, setInterviewType] = useState(null);             // 1 | 2
+  const [interviewTypeLabel, setInterviewTypeLabel] = useState("");     // "실전 면접" | "모의 면접"
+  const [interviewTypeColor, setInterviewTypeColor] = useState("blue"); // "emerald" | "blue"
 
-  // 복원 완료 후 세션 없음 가드
   useEffect(() => {
-    if (!isHydrated) return;
-    if (!interviewNo) {
+    const no = sessionStorage.getItem("interviewNo") || "";
+    if (!no) {
       alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해 주세요.");
       nav("/interview/select");
+      return;
     }
-  }, [isHydrated, interviewNo, nav]);
+    setInterviewNo(no);
+
+    const typeStr = sessionStorage.getItem("interviewType");
+    if (typeStr) {
+      const t = Number(typeStr);
+      setInterviewType(t);
+      setInterviewTypeLabel(
+        sessionStorage.getItem("interviewTypeLabel") || (t === 1 ? "실전 면접" : "모의 면접")
+      );
+      setInterviewTypeColor(
+        sessionStorage.getItem("interviewTypeColor") || (t === 1 ? "emerald" : "blue")
+      );
+    }
+  }, [nav]);
 
   const titleEmpty = title.trim() === "";
   const ensureTitleOrFocus = () => {
@@ -90,8 +94,6 @@ export default function ResumeUploadPage() {
     if (file instanceof File) {
       fd.append("resumeFile", file);
     }
-    // ✅ 선택: 서버에서 타입별 전략을 쓰고 싶으면 함께 전송(필수 아님)
-    if (interviewType != null) fd.append("interviewType", String(interviewType));
 
     logFormData(fd);
 
@@ -122,8 +124,8 @@ export default function ResumeUploadPage() {
       });
       alert(
         `업로드에 실패했습니다.\n` +
-          (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
-          `콘솔 로그를 확인해주세요.`
+        (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
+        `콘솔 로그를 확인해주세요.`
       );
     } finally {
       setLoading(false);
@@ -141,8 +143,6 @@ export default function ResumeUploadPage() {
 
     const fd = new FormData();
     fd.append("interviewTitle", title.trim()); // ✅ 제목만
-    // ✅ 선택: 타입 넘기고 싶으면 포함
-    if (interviewType != null) fd.append("interviewType", String(interviewType));
 
     logFormData(fd);
 
@@ -173,8 +173,8 @@ export default function ResumeUploadPage() {
       });
       alert(
         `제목 저장에 실패했습니다.\n` +
-          (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
-          `콘솔 로그를 확인해주세요.`
+        (err?.response?.status ? `상태코드: ${err.response.status}\n` : "") +
+        `콘솔 로그를 확인해주세요.`
       );
     } finally {
       setLoading(false);
@@ -215,7 +215,7 @@ export default function ResumeUploadPage() {
       {/* 상단 고정 Header */}
       <Header />
 
-      {/* === 로딩 오버레이 === */}
+      {/* === 로딩 오버레이: 더 투명한 글라스 + 파스텔 브리딩 + 오비터 === */}
       {loading && (
         <motion.div
           className="absolute inset-0 z-50 flex items-center justify-center"
@@ -223,10 +223,16 @@ export default function ResumeUploadPage() {
           animate={{ opacity: 1 }}
           aria-live="polite"
         >
+          {/* Glass backdrop: 투명도↓ */}
           <div className="absolute inset-0 bg-gradient-to-br from-white/45 via-white/22 to-white/12 backdrop-blur-md" />
+
+          {/* Soft vignette: 더 넓게, 더 약하게 */}
           <div className="absolute inset-0 pointer-events-none bg-slate-900/8 [mask-image:radial-gradient(120%_90%_at_50%_45%,black_55%,transparent_100%)]" />
+
+          {/* Grain texture: 더 미세하게 */}
           <div className="absolute inset-0 opacity-10 mix-blend-soft-light [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22240%22 height=%22240%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%222%22 stitchTiles=%22stitch%22/></filter><rect width=%22240%22 height=%22240%22 filter=%22url(%23n)%22 fill=%22%23ffffff%22 opacity=%220.035%22/></svg>')]" />
 
+          {/* Glass card: 투명도↓ */}
           <motion.div
             aria-label="생성 중"
             role="status"
@@ -235,6 +241,7 @@ export default function ResumeUploadPage() {
             animate={prefersReducedMotion ? undefined : { y: [8, 0, 8], scale: [0.985, 1, 0.985] }}
             transition={prefersReducedMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
           >
+            {/* Pastel breathing loader with orbiter */}
             <motion.div
               className="relative"
               initial={false}
@@ -251,9 +258,12 @@ export default function ResumeUploadPage() {
                 height="56"
                 viewBox="0 0 56 56"
                 className="block"
+                // svg 전체를 회전시킬 때도 원점 고정
                 style={{ transformBox: "fill-box", transformOrigin: "28px 28px" }}
                 animate={prefersReducedMotion ? undefined : { rotate: 360 }}
-                transition={prefersReducedMotion ? undefined : { duration: 16, repeat: Infinity, ease: "linear" }}
+                transition={
+                  prefersReducedMotion ? undefined : { duration: 16, repeat: Infinity, ease: "linear" }
+                }
               >
                 <defs>
                   <linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1">
@@ -273,8 +283,10 @@ export default function ResumeUploadPage() {
                   </filter>
                 </defs>
 
+                {/* 베이스 링 */}
                 <circle cx="28" cy="28" r="18" fill="none" stroke="#eaeef7" strokeWidth="4" />
 
+                {/* Arc 1 */}
                 <motion.circle
                   cx="28"
                   cy="28"
@@ -285,6 +297,7 @@ export default function ResumeUploadPage() {
                   strokeLinecap="round"
                   strokeDasharray="24 100"
                   filter="url(#softGlow)"
+                  // ★ 원점 고정
                   style={{ transformBox: "fill-box", transformOrigin: "28px 28px" }}
                   animate={
                     prefersReducedMotion
@@ -294,6 +307,7 @@ export default function ResumeUploadPage() {
                   transition={{ duration: 3.8, repeat: Infinity, ease: "easeInOut" }}
                 />
 
+                {/* Arc 2 */}
                 <motion.circle
                   cx="28"
                   cy="28"
@@ -304,6 +318,7 @@ export default function ResumeUploadPage() {
                   strokeLinecap="round"
                   strokeDasharray="18 100"
                   filter="url(#softGlow)"
+                  // ★ 원점 고정
                   style={{ transformBox: "fill-box", transformOrigin: "28px 28px" }}
                   animate={
                     prefersReducedMotion
@@ -313,8 +328,10 @@ export default function ResumeUploadPage() {
                   transition={{ duration: 3.0, repeat: Infinity, ease: "easeInOut", delay: 0.2 }}
                 />
 
+                {/* Orbiter */}
                 {!prefersReducedMotion && (
                   <motion.g
+                    // ★ 원점 고정
                     style={{ transformBox: "fill-box", transformOrigin: "28px 28px" }}
                     animate={{ rotate: 360 }}
                     transition={{ duration: 5.2, repeat: Infinity, ease: "linear" }}
@@ -355,7 +372,7 @@ export default function ResumeUploadPage() {
                 )}
               </div>
 
-              <input type="hidden" name="interviewNo" value={interviewNo || ""} />
+              <input type="hidden" name="interviewNo" value={interviewNo} />
               <input
                 type="text"
                 className={`mt-3 w-full max-w-[560px] h-10 px-3 rounded-lg border text-sm outline-none transition
@@ -414,9 +431,12 @@ export default function ResumeUploadPage() {
                   {/* 파일 선택 시에만 파일명 칩 표시 (없을 땐 아무것도 표시 안 함) */}
                   {file && (
                     <div className="mt-2 flex items-center justify-between gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700 shadow-sm w-fit">
+                      {/* 파일 이름 */}
                       <span className="truncate max-w-[220px] text-gray-700">
                         {file.name}
                       </span>
+
+                      {/* 휴지통 버튼 */}
                       <button
                         type="button"
                         onClick={() => setFile(null)}
@@ -456,6 +476,7 @@ export default function ResumeUploadPage() {
             {/* 우측: 목업 + 생성 버튼 */}
             <section className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
               <div className="p-6">
+                {/* === SVG: 둥실-글로우 + 패럴랙스 유지 === */}
                 <motion.div
                   className="w-full h-[420px] border border-slate-200 rounded-lg flex items-center justify-center bg-gradient-to-b from-slate-50 to-white overflow-hidden relative"
                   initial={false}

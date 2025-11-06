@@ -17,8 +17,7 @@ function toPath(p) {
 /** Windows 로컬 경로 → 썸네일 서버 URL (네 환경에 맞게 호스트만 바꿔) */
 function buildThumbUrlFromLocalPath(localPath) {
   if (!localPath) return "";
-
-  return   `http://172.31.57.139:8080/thumbnail?path=${encodeURIComponent(localPath)}`;
+  return `/thumbnail?path=${encodeURIComponent(localPath)}`;
 }
 
 /** clip → 비디오 스트림 URL 생성 (API_PATHS가 제공되면 우선 사용) */
