@@ -10,6 +10,7 @@ import {
   useTransform,
 } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import Footer from "../components/Footer";
 
 /** 핵심 기능 */
 const FEATURES = [
@@ -385,12 +386,8 @@ export default function LandingPage() {
             </div>
           </section>
 
-          {/* ===== Footer ===== */}
-          <footer className="border-t border-gray-200 bg-white">
-            <div className="max-w-6xl mx-auto px-4 py-10 text-center text-xs text-gray-500">
-              © {new Date().getFullYear()} AI 면접 코치. All rights reserved.
-            </div>
-          </footer>
+
+          <Footer />
         </main>
       </div>
     </MotionConfig>

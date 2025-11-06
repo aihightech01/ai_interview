@@ -307,7 +307,7 @@ export default function DeviceTest() {
           </div>
         </div>
       </main>
-      <Footer />
+
     </div>
   );
 }

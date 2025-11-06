@@ -36,12 +36,40 @@ function setProvisionalCount(interviewId, count) {
     const obj = getProvisionalCounts();
     obj[interviewId] = { count: Number(count) || 0, ts: Date.now() };
     localStorage.setItem(PROV_Q_KEY, JSON.stringify(obj));
-  } catch {}
+  } catch { }
 }
 function getProvisionalCountFor(interviewId) {
   const obj = getProvisionalCounts();
   return obj?.[interviewId]?.count ?? null;
 }
+
+/* ───── 요약 파싱 & 최신 선택 헬퍼 ───── */
+/** 안전 JSON 파싱 */
+function safeParse(maybe) {
+  if (!maybe) return null;
+  if (typeof maybe === "object") return maybe;
+  if (typeof maybe === "string") {
+    try { return JSON.parse(maybe); } catch { return { raw: maybe }; }
+  }
+  return { raw: String(maybe) };
+}
+/** overallcompare 형태를 사람이 읽을 문장으로 정리 */
+function toReadableOverall(objLike) {
+  if (!objLike) return "";
+  const o = safeParse(objLike) || {};
+  // 케이스1) { overallcompare: "...", comparison: "..." }
+  if (o.overallcompare || o.comparison) {
+    const parts = [];
+    if (o.overallcompare) parts.push(o.overallcompare);
+    if (o.comparison) parts.push(`(비교) ${o.comparison}`);
+    return parts.join("\n");
+  }
+  // 케이스2) 파싱 실패 → 원문
+  if (o.raw) return String(o.raw);
+  // 케이스3) 기타 객체 → JSON 문자열화
+  try { return JSON.stringify(o, null, 2); } catch { return String(o); }
+}
+
 
 const MyPage = () => {
   // ✅ AuthContext 제거 → Zustand로 대체
@@ -78,7 +106,7 @@ const MyPage = () => {
     const base = {
       name: user?.name || user?.loginId || "",
       email: user?.email || "",
-      avatarUrl: user?.avatarUrl || "",   // Zustand user에 있으면 사용
+      avatarUrl: user?.avatarUrl || "",
     };
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -93,6 +121,15 @@ const MyPage = () => {
     }
   }, [user]);
 
+  useEffect(() => {
+    console.log("[STATE] profile:", JSON.stringify(profile, null));
+  }, [profile]);
+
+  useEffect(() => {
+    console.log("[STATE] interviews:", JSON.stringify(interviews, null, 2));
+  }, [interviews]);
+
+  // ✅ 백엔드 연동: /user/profile
   // ✅ 백엔드 연동: /user/profile
   useEffect(() => {
     const fetchProfile = async () => {
@@ -100,42 +137,43 @@ const MyPage = () => {
       setErr("");
       try {
         const { data } = await api.get("/user/profile");
-        // data: { name, email, avatarUrl?, interviews: [...] }
+
+        // 루트의 요약 키만 확인 (백엔드 케이스 대비)
+        const latestSummary = toReadableOverall(
+          data?.overallcompare ?? data?.overall_compare ?? data?.overall ?? null
+        );
+
         setProfile((prev) => ({
           ...prev,
           name: data?.name || prev.name,
           email: data?.email || prev.email,
           avatarUrl: data?.avatarUrl || prev.avatarUrl,
-          overallcompare: data?.overallcompare || prev.overallcompare
+          overallcompare: latestSummary || prev.overallcompare || "",
         }));
 
+        // 인터뷰 테이블 매핑은 그대로 유지
         const mapped = (data?.interviews || []).map((it) => {
-          const startedAt = Date.parse(it.interview_date); // 숫자(밀리초) 저장
+          const startedAt = Date.parse(it.interview_date);
           const rawStatus = it.analysis_status || "";
-
-          // ⚡️ 업로드 직후 임시 질문 개수(프론트 낙관적) 병합
           const provCount = getProvisionalCountFor(String(it.interview_no));
-          const questionCount = (it.question_count ?? 0);
+          const questionCount = it.question_count ?? 0;
           const finalCount = questionCount > 0 ? questionCount : (provCount ?? 0);
 
           return {
             id: String(it.interview_no),
             title: it.interview_title,
-            count: finalCount,                   // 👈 서버 0이면 임시값으로 대체
-            date: formatKST(it.interview_date),  // 화면표기용(KST 문자열)
-            startedAt,                           // 계산용(숫자)
-            kind: it.interview_type,             // "실전 면접" | "모의 면접"
-            statusText: rawStatus,               // 원상태(표시 시점에 덮어씌움)
+            count: finalCount,
+            date: formatKST(it.interview_date),
+            startedAt,
+            kind: it.interview_type,
+            statusText: rawStatus,
             statusTone: rawStatus?.includes("중") ? "blue" : "green",
           };
         });
         setInterviews(mapped);
       } catch (e) {
         console.error(e);
-        // ❗️401은 axios 인터셉터에서 clearAuth + /login 처리됨
-        if (e?.response?.status !== 401) {
-          setErr("프로필 정보를 불러오지 못했습니다.");
-        }
+        if (e?.response?.status !== 401) setErr("프로필 정보를 불러오지 못했습니다.");
       } finally {
         setLoading(false);
       }
@@ -143,7 +181,6 @@ const MyPage = () => {
 
     if (isAuth) fetchProfile();
   }, [isAuth]);
-
   // ✅ 프론트에서 1시간 초과시 "분석 완료"로 강제 표기 + 질문 0개는 숨김
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -261,7 +298,7 @@ const MyPage = () => {
 
   // ✅ 주 단위 그룹
   const weekGroups = useMemo(() => {
-    const map = new Map(); // key: "YYYY.MM.DD(월)" → items[]
+    const map = new Map(); // key: "YYYY.MM.DD" → items[]
     filtered.forEach((it) => {
       const basis = toDateObj(it.startedAt || it.date);
       const key = weekKeyOf(basis);
@@ -354,18 +391,16 @@ const MyPage = () => {
               </div>
             </section>
 
-            {/* 최근 분석 요약 — 심플 콜아웃 업그레이드 */}
+            {/* 최근 분석 요약 */}
             <section className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm">
               <div className="p-5">
                 <div className="flex items-start justify-between">
                   <h3 className="text-sm font-semibold text-gray-800">가장 최근 분석 요약</h3>
-                  {/* 작은 메타 배지 */}
                   <span className="inline-flex items-center rounded-md border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600">
                     요약
                   </span>
                 </div>
 
-                {/* 좌측 라인 + 아주 옅은 배경으로 가독성만 살림 */}
                 <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white border border-gray-200">
@@ -406,9 +441,9 @@ const MyPage = () => {
                     aria-selected={tab === name}
                     className={`px-3.5 py-1.5 text-sm rounded-lg transition
                     ${tab === name
-                      ? "bg-white shadow-sm border border-gray-200 text-blue-700"
-                      : "text-gray-700 hover:bg-white/60"
-                    }`}
+                        ? "bg-white shadow-sm border border-gray-200 text-blue-700"
+                        : "text-gray-700 hover:bg-white/60"
+                      }`}
                   >
                     <span className="inline-flex items-center gap-1.5">
                       <span className="text-[12px]">{name === "실전 면접" ? "⚡" : "🎯"}</span>
@@ -457,16 +492,14 @@ const MyPage = () => {
                           {g.items.map((item, idx) => (
                             <tr
                               key={item.id}
-                              className={`border-t border-gray-100 transition hover:bg-gray-50 cursor-pointer ${
-                                idx % 2 === 1 ? "bg-gray-50/30" : "bg-white"
-                              }`}
+                              className={`border-t border-gray-100 transition hover:bg-gray-50 cursor-pointer ${idx % 2 === 1 ? "bg-gray-50/30" : "bg-white"
+                                }`}
                               onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
                             >
                               <Td>
                                 <span
-                                  className={`text-[11px] mr-2 font-semibold ${
-                                    item.kind === "실전 면접" ? "text-emerald-700" : "text-blue-700"
-                                  }`}
+                                  className={`text-[11px] mr-2 font-semibold ${item.kind === "실전 면접" ? "text-emerald-700" : "text-blue-700"
+                                    }`}
                                 >
                                   {item.kind === "실전 면접" ? "●" : "●"}
                                 </span>

@@ -5,7 +5,7 @@ import axios from "axios";
 export const BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api").trim();
 
 const axiosInstance = axios.create({
-  baseURL: BASE_URL,   // => "/api"
+  baseURL: BASE_URL, // => "/api"
   timeout: 80000,
   headers: { "Content-Type": "application/json" },
 });
@@ -21,26 +21,44 @@ axiosInstance.interceptors.request.use((config) => {
 
 export default axiosInstance;
 
-// 엔드포인트 경로 상수
+// ✅ 엔드포인트 경로 상수
 export const API_PATHS = {
-  QUESTIONS: "/questions",
-  CUSTOM_QUESTIONS: "/custom-questions", // ✅ 복수형으로 통일
-  INTERVIEWS: "/interviews",
   AUTH: {
-    REGISTER: "/user/register",
     LOGIN: "/user/login",
+    REGISTER: "/user/register",
+    CHECK_ID: (id) => `/user/check-id?id=${id}`,
     PROFILE: "/user/profile",
+    UPDATE: "/user/update", // GET 진입 / POST 수정
   },
 
-    USER: {
-    // 세션의 질문/클립 목록
-    PROFILE_LIST: (sessionId) => `/user/profile/${sessionId}`,
-    // 특정 비디오(문항) 상세
-    PROFILE_DETAIL: (sessionId, videoNo) => `/user/profile/${sessionId}/${videoNo}`,
+  INTERVIEWS: {
+    START: "/interviews/start",
+    CALIBRATION: (interviewNo) => `/interviews/${interviewNo}/calibration`,
+    UPLOAD_VIDEO: (interviewNo, questionNo) =>
+      `/interviews/${interviewNo}/${questionNo}/video`,
+  },
+
+  RESUMES: {
+    UPLOAD: (interviewNo) => `/resumes/upload/${interviewNo}`,
+  },
+
+  QUESTIONS: {
+    MY_QUESTIONS: "/questions/my-questions",
+    CUSTOM: "/questions/custom",
+    DELETE: (questionNo) => `/questions/delete/${questionNo}`,
+  },
+
+  JOBS: {
+    STATUS: (jobId) => `/jobs/${jobId}`,
+  },
+
+  USER: {
+    PROFILE_LIST: (interviewNo) => `/user/profile/${interviewNo}`,
+    PROFILE_DETAIL: (interviewNo, videoNo) =>
+      `/user/profile/${interviewNo}/${videoNo}`,
   },
 
   VIDEOS: {
-    STREAM: (videoNo) => `/videos/stream/${videoNo}`, 
+    STREAM: (videoNo) => `/videos/stream/${videoNo}`,
   },
-
 };

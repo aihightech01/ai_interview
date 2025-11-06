@@ -2,15 +2,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "../../components/Header";
-// Footer는 필요시 사용
-// import Footer from "../../components/Footer";
+
 import { useInterviewStore, STEPS } from "../../stores/interviewStore";
 
 /* ====== 상수 ====== */
 const NEXT_BASE = "/interview/run";
 const CALIB_OVERLAY_DELAY_MS = 3000;   // '시작하기' 누르고 3초 후 오버레이
 const RECORD_DURATION_MS = 3000;       // 캘리브레이션 샘플 3초 녹화
-const API_BASE = (import.meta.env.VITE_API_BASE || "http://172.31.57.139:8080").replace(/\/+$/, "");
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 /* ====== MediaRecorder 지원 체크 ====== */
 function isTypeSupported(type) {
@@ -22,7 +21,7 @@ function isTypeSupported(type) {
 }
 const FALLBACK_WEBM_VP9 = "video/webm; codecs=vp9";
 const FALLBACK_WEBM_VP8 = "video/webm; codecs=vp8";
-const FALLBACK_WEBM     = "video/webm";
+const FALLBACK_WEBM = "video/webm";
 
 /* ====== 유틸 ====== */
 const GUIDE = [
@@ -36,7 +35,7 @@ const GUIDE = [
 const mimeToExt = (mime = "video/webm") => {
   const m = (mime || "").toLowerCase();
   if (m.includes("webm")) return "webm";
-  if (m.includes("mp4"))  return "mp4";
+  if (m.includes("mp4")) return "mp4";
   return "webm";
 };
 const joinUrl = (base, path) =>
@@ -48,7 +47,9 @@ async function uploadCalibration(interviewNo, blob, mimeType = "video/webm") {
   const filename = `calibration_${Date.now()}.${ext}`;
   const form = new FormData();
   form.append("video", blob, filename);
+
   const url = joinUrl(API_BASE, `/api/interviews/${interviewNo}/calibration`);
+
   const res = await fetch(url, { method: "POST", body: form });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -63,14 +64,14 @@ export default function Calibration() {
   const nav = useNavigate();
 
   /* ====== 스토어: 세션 → 스토어 하이드레이트 & 메타 표시 ====== */
-  const isHydrated         = useInterviewStore((s) => s.isHydrated);
+  const isHydrated = useInterviewStore((s) => s.isHydrated);
   const hydrateFromSession = useInterviewStore((s) => s.hydrateFromSession);
-  const interviewNo        = useInterviewStore((s) => s.interviewNo);
-  const interviewTitle     = useInterviewStore((s) => s.title);
-  const interviewType      = useInterviewStore((s) => s.interviewType);
+  const interviewNo = useInterviewStore((s) => s.interviewNo);
+  const interviewTitle = useInterviewStore((s) => s.title);
+  const interviewType = useInterviewStore((s) => s.interviewType);
   const interviewTypeLabel = useInterviewStore((s) => s.interviewTypeLabel);
   const interviewTypeColor = useInterviewStore((s) => s.interviewTypeColor);
-  const setStep            = useInterviewStore((s) => s.setStep);
+  const setStep = useInterviewStore((s) => s.setStep);
 
   // 진입 시 세션 하이드레이트 + 단계 표시
   useEffect(() => {
@@ -97,13 +98,13 @@ export default function Calibration() {
   const [calibStarted, setCalibStarted] = useState(false);
   const [calibCooling, setCalibCooling] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
-  const [showOverlay, setShowOverlay]   = useState(false);
-  const [isRecording, setIsRecording]   = useState(false);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
 
   const videoRef = useRef(null);
   const [stream, setStream] = useState(null);
-  const mediaRecorderRef   = useRef(null);
-  const recordedTypeRef    = useRef("");
+  const mediaRecorderRef = useRef(null);
+  const recordedTypeRef = useRef("");
 
   /* ====== 미디어 준비 ====== */
   const getMediaPermission = useCallback(async () => {
@@ -127,7 +128,7 @@ export default function Calibration() {
     if (!v) return;
     if (v.srcObject !== stream) v.srcObject = stream;
     v.muted = true;
-    v.play?.().catch(() => {});
+    v.play?.().catch(() => { });
   }, [stream]);
 
   /* ====== 캘리브레이션 흐름 ====== */
@@ -244,11 +245,10 @@ export default function Calibration() {
               )}
               {interviewType && (
                 <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${
-                    interviewTypeColor === "emerald"
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-blue-200 bg-blue-50 text-blue-700"
-                  }`}
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs ${interviewTypeColor === "emerald"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-blue-200 bg-blue-50 text-blue-700"
+                    }`}
                 >
                   {interviewTypeLabel}
                 </span>
@@ -271,11 +271,10 @@ export default function Calibration() {
                   <button
                     onClick={onCalibrationStart}
                     disabled={calibCooling}
-                    className={`h-9 px-3 rounded-lg text-sm ${
-                      calibCooling
-                        ? "bg-slate-200 text-slate-500"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
+                    className={`h-9 px-3 rounded-lg text-sm ${calibCooling
+                      ? "bg-slate-200 text-slate-500"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
                   >
                     {calibStarted
                       ? (calibCooling ? `준비 중… ${cooldownLeft}s` : "다시 맞추기")
@@ -347,11 +346,10 @@ export default function Calibration() {
                   <button
                     onClick={onClickStartInterview}
                     disabled={startDisabled}
-                    className={`h-10 px-4 rounded-lg w-full text-sm ${
-                      !startDisabled
-                        ? "bg-blue-600 text-white hover:bg-blue-700"
-                        : "bg-slate-200 text-slate-500 cursor-not-allowed"
-                    }`}
+                    className={`h-10 px-4 rounded-lg w-full text-sm ${!startDisabled
+                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                      : "bg-slate-200 text-slate-500 cursor-not-allowed"
+                      }`}
                     title={
                       !interviewNo
                         ? "세션 생성 후 다시 시도하세요."
@@ -366,7 +364,7 @@ export default function Calibration() {
           </div>
         </div>
       </main>
-      {/* <Footer /> */}
+
     </div>
   );
 }

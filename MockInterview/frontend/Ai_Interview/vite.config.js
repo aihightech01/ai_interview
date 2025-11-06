@@ -6,6 +6,12 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    allowedHosts: [
+      'localhost',
+      '127.0.0.1',
+      'grimmer-unmindfully-galina.ngrok-free.dev' // <-- Add this line
+    ],
+
     proxy: {
       "/api": {
         target: "http://172.31.57.139:8080",
