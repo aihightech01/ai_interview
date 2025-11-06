@@ -281,7 +281,7 @@ export default function SessionPreview() {
             ← 뒤로
           </button>
           <div className="text-sm text-gray-500">
-            세션 #{sessionId}
+            {/* 세션 #{sessionId} */}
             {interviewMeta.date ? ` · ${interviewMeta.date}` : ""}
           </div>
         </div>
@@ -292,10 +292,10 @@ export default function SessionPreview() {
           {/* 헤더 */}
           <div className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
             <h2 className="text-lg font-semibold text-gray-900">면접 분석 결과</h2>
-            <p className="text-sm text-gray-500 mt-1">
+            {/* <p className="text-sm text-gray-500 mt-1">
               {interviewMeta.title ? `${interviewMeta.title} · ` : ""}
-              세션 #{sessionId} · 질문 {completedCount}개
-            </p>
+              질문 {completedCount}개
+            </p> */}
           </div>
 
 

@@ -53,7 +53,7 @@ const MyPage = () => {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState("실전 면접");
-  const [profile, setProfile] = useState({ name: "", email: "", avatarUrl: "" });
+  const [profile, setProfile] = useState({ name: "", email: "", avatarUrl: "", overallcompare: "" });
 
   // 서버에서 받아온 인터뷰 리스트
   const [interviews, setInterviews] = useState([]);
@@ -106,6 +106,7 @@ const MyPage = () => {
           name: data?.name || prev.name,
           email: data?.email || prev.email,
           avatarUrl: data?.avatarUrl || prev.avatarUrl,
+          overallcompare: data?.overallcompare || prev.overallcompare
         }));
 
         const mapped = (data?.interviews || []).map((it) => {
@@ -289,18 +290,28 @@ const MyPage = () => {
   }, [filtered]);
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] flex flex-col">
+    <div className="min-h-screen bg-[radial-gradient(1200px_600px_at_80%_-10%,#e0f2fe_10%,transparent_60%),radial-gradient(1000px_500px_at_0%_0%,#f3e8ff_10%,transparent_60%)]">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-white/80 backdrop-blur border-b border-gray-100">
+      <header className="sticky top-0 z-20 border-b border-gray-100/80 backdrop-blur bg-white/70">
         <div className="mx-auto max-w-6xl px-4 h-14 flex items-center justify-between">
-          <button onClick={() => navigate("/")} className="font-semibold text-gray-900" aria-label="홈으로">
-            AI 면접 코치
+          <button
+            onClick={() => navigate("/")}
+            className="group inline-flex items-center gap-2 font-semibold text-gray-900"
+            aria-label="홈으로"
+          >
+            <span>AI 면접 코치</span>
           </button>
           <nav className="flex items-center gap-2">
-            <button onClick={() => navigate("/")} className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100">
+            <button
+              onClick={() => navigate("/")}
+              className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100"
+            >
               Home
             </button>
-            <button onClick={handleLogout} className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100">
+            <button
+              onClick={handleLogout}
+              className="px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100"
+            >
               로그아웃
             </button>
           </nav>
@@ -309,119 +320,178 @@ const MyPage = () => {
 
       {/* Body */}
       <main className="flex-1">
-        <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+        <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
           {/* 프로필 + 최근 분석 요약 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {/* 프로필 카드 */}
-            <section className="md:col-span-1 rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
-              <div className="flex items-start gap-4">
-                {/* 아바타 (이미지 or 이니셜) */}
-                <div className="h-12 w-12 rounded-full overflow-hidden border border-gray-200 bg-gray-100 grid place-items-center">
-                  <DefaultAvatar size={48} className="text-gray-400" />
-                </div>
+            <section className="relative md:col-span-1 rounded-2xl bg-white border border-gray-200 shadow-sm overflow-hidden">
+              {/* 상단 색띠 */}
+              <div className="h-16 bg-[linear-gradient(135deg,#eff6ff,35%,#ecfeff,70%,#f5f3ff)]" />
+              <div className="p-5 pt-3">
+                <div className="flex items-start gap-5 -mt-10">
+                  {/* 아바타 */}
+                  <div className="h-22 w-20 rounded-2xl overflow-hidden border border-white shadow-sm bg-gray-50 grid place-items-center ring-1 ring-gray-100">
+                    <DefaultAvatar size={64} className="text-gray-400" />
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="truncate font-medium text-gray-900">{profile.name || "이름 미설정"} 님</p>
-                  <p className="truncate text-xs text-gray-500">{profile.email || "—"}</p>
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate font-semibold text-gray-900">{profile.name || "이름 미설정"} 님</p>
+                    <p className="truncate text-xs text-gray-500">{profile.email || "—"}</p>
 
-                <button
-                  className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 hover:bg-gray-50"
-                  onClick={openEdit}
-                >
-                  수정
-                </button>
+                    <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50/60 px-2.5 py-1">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      <span className="text-[11px] text-gray-600">로그인 상태</span>
+                    </div>
+                  </div>
+
+                  <button
+                    className="px-3 py-1.5 rounded-lg text-sm bg-white border border-gray-200 hover:bg-gray-50 shadow-sm"
+                    onClick={openEdit}
+                  >
+                    수정
+                  </button>
+                </div>
               </div>
             </section>
 
-            {/* 최근 분석 요약(임시 고정 문구) */}
-            <section className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
-              <h3 className="text-sm font-medium text-gray-700">가장 최근 분석 요약</h3>
-              <p className="mt-2 text-sm leading-relaxed text-gray-600">
-                시선 흔들림과 말 속도가 빠름. 구조화(서론–본론–결론) 예시 추가 필요. 톤/볼륨은 양호.
-              </p>
+            {/* 최근 분석 요약 — 심플 콜아웃 업그레이드 */}
+            <section className="md:col-span-2 rounded-2xl bg-white border border-gray-200 shadow-sm">
+              <div className="p-5">
+                <div className="flex items-start justify-between">
+                  <h3 className="text-sm font-semibold text-gray-800">가장 최근 분석 요약</h3>
+                  {/* 작은 메타 배지 */}
+                  <span className="inline-flex items-center rounded-md border border-gray-200 px-2 py-0.5 text-[11px] text-gray-600">
+                    요약
+                  </span>
+                </div>
+
+                {/* 좌측 라인 + 아주 옅은 배경으로 가독성만 살림 */}
+                <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white border border-gray-200">
+                      <span className="text-[12px]">📊</span>
+                    </div>
+                    <p className="flex-1 text-[13px] leading-6 text-gray-700 whitespace-pre-wrap">
+                      {profile.overallcompare || "최근 분석 요약이 아직 없습니다."}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </section>
           </div>
 
           {/* 분석 결과 + 탭 */}
           <section className="rounded-2xl bg-white border border-gray-200 shadow-sm p-5">
-            <div className="flex items-end justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <h3 className="text-sm font-medium text-gray-700">
-                  {tab} 분석 결과 <span className="text-blue-600">{filtered.length}</span>
+                <h3 className="text-sm font-semibold text-gray-800">
+                  {tab} 분석 결과{" "}
+                  <span className="ml-1 inline-flex items-center rounded-lg bg-blue-50 px-2.5 py-0.5 text-blue-700">
+                    {filtered.length}
+                  </span>
                 </h3>
-                {/* 안내 문구 제거(콘솔로만 노출) */}
               </div>
 
-              <div className="flex items-center gap-2 text-sm">
+              {/* Segmented Tabs */}
+              <div
+                className="inline-flex rounded-xl border border-gray-200 bg-gray-50/60 p-1 overflow-hidden"
+                role="tablist"
+                aria-label="면접 종류 선택"
+              >
                 {["실전 면접", "모의 면접"].map((name) => (
                   <button
                     key={name}
                     onClick={() => setTab(name)}
-                    className={`px-3 py-1.5 rounded-lg border text-sm ${
-                      tab === name ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                    role="tab"
+                    aria-selected={tab === name}
+                    className={`px-3.5 py-1.5 text-sm rounded-lg transition
+                    ${tab === name
+                      ? "bg-white shadow-sm border border-gray-200 text-blue-700"
+                      : "text-gray-700 hover:bg-white/60"
                     }`}
                   >
-                    {name}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="text-[12px]">{name === "실전 면접" ? "⚡" : "🎯"}</span>
+                      {name}
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
 
             {/* 주 단위 섹션 테이블 */}
-            <div className="mt-4 space-y-6">
+            <div className="mt-5 space-y-6">
               {loading ? (
-                <div className="py-16 text-center text-sm text-gray-500">불러오는 중…</div>
+                <div className="py-16 text-center text-sm text-gray-600">
+                  <div className="mx-auto mb-3 h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-gray-700" />
+                  불러오는 중…
+                </div>
               ) : err ? (
                 <div className="py-16 text-center text-sm text-red-500">{err}</div>
               ) : weekGroups.length === 0 ? (
-                <div className="py-16 text-center text-sm text-gray-500">표시할 항목이 없습니다.</div>
+                <div className="py-16 text-center text-sm text-gray-600">
+                  <div className="mx-auto mb-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-gray-100">🗂️</div>
+                  표시할 항목이 없습니다.
+                </div>
               ) : (
                 weekGroups.map((g) => (
                   <section key={g.key} className="rounded-2xl border border-gray-200 overflow-hidden">
                     {/* 주 헤더 */}
-                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 text-sm font-semibold text-gray-800">
+                    <div className="px-4 py-2 bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 text-sm font-semibold text-gray-700">
                       {g.label}
                     </div>
 
                     {/* 해당 주 테이블 */}
-                    <table className="w-full text-sm">
-                      <thead className="bg-white text-gray-500">
-                        <tr>
-                          <Th>면접 제목</Th>
-                          <Th className="w-24 text-center">질문 개수</Th>
-                          <Th className="w-28 text-center">분석 상태</Th>
-                          <Th className="w-24 text-center">면접 종류</Th>
-                          <Th className="w-40 text-right pr-6">면접 날짜</Th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {g.items.map((item) => (
-                          <tr
-                            key={item.id}
-                            className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
-                            onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
-                          >
-                            <Td>
-                              <span
-                                className={`text-[11px] mr-2 font-medium ${
-                                  item.kind === "실전 면접" ? "text-green-600" : "text-blue-600"
-                                }`}
-                              >
-                                {item.kind}
-                              </span>
-                              <span className="font-medium text-gray-900">Q. {item.title}</span>
-                            </Td>
-                            <Td className="text-center">{item.count}</Td>
-                            <Td className="text-center">
-                              <Badge tone={item.statusTone}>{item.statusText}</Badge>
-                            </Td>
-                            <Td className="text-center">{item.kind}</Td>
-                            <Td className="text-right pr-6 text-gray-600">{item.date}</Td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-white/70 backdrop-blur text-gray-500">
+                          <tr className="[&>th]:border-b [&>th]:border-gray-100">
+                            <Th>면접 제목</Th>
+                            <Th className="w-28 text-center">질문 개수</Th>
+                            <Th className="w-32 text-center">분석 상태</Th>
+                            <Th className="w-28 text-center">면접 종류</Th>
+                            <Th className="w-44 text-right pr-6">면접 날짜</Th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {g.items.map((item, idx) => (
+                            <tr
+                              key={item.id}
+                              className={`border-t border-gray-100 transition hover:bg-gray-50 cursor-pointer ${
+                                idx % 2 === 1 ? "bg-gray-50/30" : "bg-white"
+                              }`}
+                              onClick={() => navigate(`/session/${item.id}/preview`, { state: { session: item } })}
+                            >
+                              <Td>
+                                <span
+                                  className={`text-[11px] mr-2 font-semibold ${
+                                    item.kind === "실전 면접" ? "text-emerald-700" : "text-blue-700"
+                                  }`}
+                                >
+                                  {item.kind === "실전 면접" ? "●" : "●"}
+                                </span>
+                                <span className="font-medium text-gray-900">Q. {item.title}</span>
+                              </Td>
+                              <Td className="text-center">
+                                <span className="inline-flex min-w-[2.25rem] justify-center rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-700">
+                                  {item.count}
+                                </span>
+                              </Td>
+                              <Td className="text-center">
+                                <Badge tone={item.statusTone}>{item.statusText}</Badge>
+                              </Td>
+                              <Td className="text-center">
+                                <span className="inline-flex items-center gap-1">
+                                  {item.kind === "실전 면접" ? "⚡" : "🎯"}
+                                  {item.kind}
+                                </span>
+                              </Td>
+                              <Td className="text-right pr-6 text-gray-600">{item.date}</Td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </section>
                 ))
               )}
@@ -432,64 +502,76 @@ const MyPage = () => {
 
       {/* ===== 프로필 편집 + 비밀번호 변경 모달 ===== */}
       <Modal isOpen={isEditOpen} onClose={() => setIsEditOpen(false)} title="프로필 수정">
-        <form onSubmit={handleSaveProfile} className="p-5 space-y-5">
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">이름</label>
-              <input
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200"
-                value={editProfile.name}
-                onChange={(e) => setEditProfile((p) => ({ ...p, name: e.target.value }))}
-                placeholder="이름을 입력하세요"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">이메일</label>
-              <input
-                type="email"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200"
-                value={editProfile.email}
-                onChange={(e) => setEditProfile((p) => ({ ...p, email: e.target.value }))}
-                placeholder="email@example.com"
-              />
+        {/* ▼▼▼ 폼 레이아웃/타이포그래피만 개선 — 로직 동일 ▼▼▼ */}
+        <form onSubmit={handleSaveProfile} className="p-5 space-y-6">
+          {/* 섹션: 기본 정보 */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-800">기본 정보</h4>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs text-gray-600">이름</label>
+                <input
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                  value={editProfile.name}
+                  onChange={(e) => setEditProfile((p) => ({ ...p, name: e.target.value }))}
+                  placeholder="이름을 입력하세요"
+                />
+                <p className="text-[11px] text-gray-500">실명 또는 서비스에서 보여질 이름</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs text-gray-600">이메일</label>
+                <input
+                  type="email"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                  value={editProfile.email}
+                  onChange={(e) => setEditProfile((p) => ({ ...p, email: e.target.value }))}
+                  placeholder="email@example.com"
+                />
+                <p className="text-[11px] text-gray-500">로그인/알림에 사용돼요</p>
+              </div>
             </div>
           </div>
 
           <hr className="border-gray-200" />
 
-          <div className="space-y-3">
-            <p className="text-sm font-medium text-gray-800">비밀번호 변경 (선택)</p>
-            <p className="text-xs text-gray-500">변경하지 않으려면 아래 입력란을 비워 두세요.</p>
-
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">현재 비밀번호</label>
-              <input
-                type="password"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200"
-                value={pwCurrent}
-                onChange={(e) => setPwCurrent(e.target.value)}
-                placeholder="현재 비밀번호"
-                autoComplete="current-password"
-              />
+          {/* 섹션: 비밀번호 변경 (선택) */}
+          <div>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-800">비밀번호 변경 (선택)</h4>
+              <span className="text-[11px] text-gray-500">입력하지 않으면 변경되지 않습니다</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">새 비밀번호</label>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1.5 md:col-span-1">
+                <label className="block text-xs text-gray-600">현재 비밀번호</label>
                 <input
                   type="password"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                  value={pwCurrent}
+                  onChange={(e) => setPwCurrent(e.target.value)}
+                  placeholder="현재 비밀번호"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-1">
+                <label className="block text-xs text-gray-600">새 비밀번호</label>
+                <input
+                  type="password"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-100"
                   value={pwNew}
                   onChange={(e) => setPwNew(e.target.value)}
                   placeholder="8자 이상"
                   autoComplete="new-password"
                 />
               </div>
-              <div>
-                <label className="block text-sm text-gray-700 mb-1">새 비밀번호 확인</label>
+
+              <div className="space-y-1.5 md:col-span-1">
+                <label className="block text-xs text-gray-600">새 비밀번호 확인</label>
                 <input
                   type="password"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring focus:ring-blue-200"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-4 focus:ring-blue-100"
                   value={pwNew2}
                   onChange={(e) => setPwNew2(e.target.value)}
                   placeholder="다시 입력"
@@ -497,19 +579,30 @@ const MyPage = () => {
                 />
               </div>
             </div>
+            <p className="mt-2 text-[11px] text-gray-500">안전을 위해 8자 이상, 추측하기 어려운 조합을 권장합니다.</p>
           </div>
 
-          {formError && <p className="text-sm text-red-500">{formError}</p>}
+          {formError && (
+            <p className="text-sm text-red-500">{formError}</p>
+          )}
 
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setIsEditOpen(false)} className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm">
+          <div className="pt-1 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsEditOpen(false)}
+              className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm"
+            >
               취소
             </button>
-            <button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
+            <button
+              type="submit"
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm text-sm"
+            >
               저장
             </button>
           </div>
         </form>
+        {/* ▲▲▲ 폼 레이아웃/타이포그래피만 개선 — 로직 동일 ▲▲▲ */}
       </Modal>
     </div>
   );
@@ -519,18 +612,23 @@ export default MyPage;
 
 /* ───── 테이블 유틸 ───── */
 function Th({ children, className = "" }) {
-  return <th className={`py-3 pl-4 pr-2 text-left font-medium ${className}`}>{children}</th>;
+  return <th className={`py-3 pl-4 pr-2 text-left font-semibold tracking-tight ${className}`}>{children}</th>;
 }
 function Td({ children, className = "" }) {
   return <td className={`py-3 pl-4 pr-2 align-middle ${className}`}>{children}</td>;
 }
 function Badge({ children, tone = "gray" }) {
   const map = {
-    blue: "bg-blue-50 text-blue-700",
-    green: "bg-emerald-50 text-emerald-700",
-    gray: "bg-gray-100 text-gray-700",
+    blue: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200",
+    green: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200",
+    gray: "bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-200",
   };
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${map[tone]}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${map[tone]}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${tone === "blue" ? "bg-blue-500" : tone === "green" ? "bg-emerald-500" : "bg-gray-500"}`} />
+      {children}
+    </span>
+  );
 }
 
 /* ───── 날짜 헬퍼(KST 표기) ───── */
