@@ -1,0 +1,14 @@
+version: "3.9"
+services:
+  frontend:
+    build:
+      context: ./frontend/Ai_Interview
+      dockerfile: Dockerfile.dev   # ← 개발용 Dockerfile 권장 (npm ci 등 포함)
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/Ai_Interview:/app
+      - /app/node_modules          # ← 컨테이너 node_modules 보호(호스트가 덮어쓰지 않게)
+    environment:
+      - CHOKIDAR_USEPOLLING=true   # ← 파일 변경 감지 안정화
+    command: npm run dev -- --host 0.0.0.0 --port 5173
