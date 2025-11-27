@@ -1,0 +1,668 @@
+// src/pages/interview/QuestionList.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import axiosInstance from "../../utils/axiosInstance";
+import { useNavigate } from "react-router-dom";
+import Header from "../../components/Header";
+
+import { splitNumberedQuestions } from "../../utils/helper";
+import { useInterviewStore } from "../../stores/interviewStore"; // ✅ 스토어 사용
+
+const TABS = [
+  { key: "COMMON", label: "공통 면접 질문" },
+  { key: "RESUME", label: "자소서 기반 질문" },
+  { key: "CUSTOM", label: "커스텀 질문" },
+];
+
+const SUMMARY_MAX_CHARS = 42;
+function safeTruncate(str = "", max = SUMMARY_MAX_CHARS) {
+  const flat = String(str).replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  return flat.slice(0, max).trimEnd() + "…";
+}
+
+/* === NEW 뱃지/정렬용 표시 헬퍼들 (표시만 바뀜) === */
+const NEW_WINDOW_MS = 1000 * 60 * 60 * 24; // 24h
+
+// questionId 안의 10~13자리 숫자(초/밀리초 epoch 추정)를 뽑음
+function extractEpochLike(id = "") {
+  const digits = String(id).match(/\d{10,13}/g);
+  if (!digits) return null;
+  const n = Number(digits[0]);
+  if (!Number.isFinite(n)) return null;
+  // 13자리면 ms, 10자리면 sec 로 판단
+  return n > 1e12 ? n : n * 1000;
+}
+
+// 표시용 생성시각 추정: createdAt > questionId에서 epoch-like > null
+function guessCreatedAt(q) {
+  if (q?.createdAt) {
+    const t = +new Date(q.createdAt);
+    if (Number.isFinite(t)) return t;
+  }
+  const fromId = extractEpochLike(q?.questionId);
+  if (fromId) return fromId;
+  return null;
+}
+
+function isNewByTime(t) {
+  if (!Number.isFinite(t)) return false;
+  const now = Date.now();
+  return now - t <= NEW_WINDOW_MS;
+}
+
+// 칩(뱃지) 공통 스타일
+function pillCls(color = "gray") {
+  const base =
+    "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium border align-middle";
+  const map = {
+    blue: `${base} border-blue-200 bg-blue-50 text-blue-700`,
+    emerald: `${base} border-emerald-200 bg-emerald-50 text-emerald-700`,
+    gray: `${base} border-gray-200 bg-gray-50 text-gray-600`,
+    red: `${base} border-red-200 bg-red-50 text-red-700`,
+  };
+  return map[color] || map.gray;
+}
+
+export default function QuestionListPage() {
+  const nav = useNavigate();
+
+  // ✅ 스토어 값/액션
+  const isHydrated           = useInterviewStore((s) => s.isHydrated);
+  const hydrateFromSession   = useInterviewStore((s) => s.hydrateFromSession);
+
+  const interviewNo          = useInterviewStore((s) => s.interviewNo);
+  const storeTitle           = useInterviewStore((s) => s.title);
+  const interviewType        = useInterviewStore((s) => s.interviewType);
+  const interviewTypeLabel   = useInterviewStore((s) => s.interviewTypeLabel);
+  const interviewTypeColor   = useInterviewStore((s) => s.interviewTypeColor);
+
+  const setSelectedQuestions = useInterviewStore((s) => s.setSelectedQuestions);
+  const setStep              = useInterviewStore((s) => s.setStep);
+  const setStoreTitle        = useInterviewStore((s) => s.setTitle);
+
+  // UI 표시용 로컬
+  const [interviewTitle, setInterviewTitle] = useState("");
+
+  // 전체 질문(탭 필터용)
+  const [allQuestions, setAllQuestions] = useState([]); // [{questionId,text,source,createdAt?}]
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+
+  // 탭/선택/커스텀 입력/바쁨
+  const [tab, setTab] = useState(TABS[0].key);
+  const [selected, setSelected] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  // 전체 보기 모달
+  const [previewText, setPreviewText] = useState(null);
+  useEffect(() => {
+    if (previewText === null) return;
+    const onKeyDown = (e) => { if (e.key === "Escape") setPreviewText(null); };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [previewText]);
+
+  /* -------------------- 세션 → 스토어 하이데이트 & 가드 -------------------- */
+  useEffect(() => {
+    hydrateFromSession();
+  }, [hydrateFromSession]);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (!interviewNo) {
+      alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해주세요.");
+      nav("/interview/select");
+      return;
+    }
+    // 제목은 스토어 우선, 없으면 세션에서
+    const ssTitle = sessionStorage.getItem("interviewTitle") || "";
+    const finalTitle = storeTitle?.trim() || ssTitle;
+    setInterviewTitle(finalTitle);
+    if (!storeTitle && ssTitle) setStoreTitle(ssTitle);
+  }, [isHydrated, interviewNo, storeTitle, setStoreTitle, nav]);
+
+  // 공통 함수: 배열 응답 정규화 (항목 내부가 번호 묶음이면 분해)
+  const normalizeFromArray = (arr) => {
+    const out = [];
+    arr.forEach((d, idx) => {
+      const source = String(d.questionType ?? d.source ?? "COMMON").toUpperCase();
+      const content = d.questionContent ?? d.text ?? d.content ?? "";
+      const idBase = d.questionNO ?? d.questionId ?? d.id ?? d.uuid ?? `${source}-${idx}`;
+
+      const pieces = splitNumberedQuestions(content);
+      if (pieces.length > 1) {
+        pieces.forEach((p) => {
+          out.push({
+            questionId: `${idBase}-${p.id}`,
+            text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
+            source, // COMMON/RESUME/CUSTOM
+            createdAt: d?.createdAt ?? null, // 있으면 유지
+          });
+        });
+      } else if (content.trim()) {
+        out.push({
+          questionId: String(idBase),
+          text: content.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
+          source,
+          createdAt: d?.createdAt ?? null,
+        });
+      }
+    });
+    return out;
+  };
+
+  // 1) 질문 목록 조회 — COMMON/RESUME 모두 채우기 + 보강 호출
+  useEffect(() => {
+    if (!isHydrated || !interviewNo) return;
+
+    let ignore = false;
+
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const { data } = await axiosInstance.get("/questions/my-questions");
+
+        let normalized = [];
+
+        if (Array.isArray(data)) {
+          // ✅ 배열이면 각 항목의 questionType으로 COMMON/RESUME/CUSTOM 분류 + 내부 묶음 분해
+          normalized = normalizeFromArray(data);
+        } else if (Array.isArray(data?.items)) {
+          normalized = normalizeFromArray(data.items);
+        } else {
+          // ✅ 문자열 묶음이면 RESUME로만 분해
+          const raw =
+            typeof data === "string"
+              ? data
+              : typeof data?.questionsText === "string"
+              ? data.questionsText
+              : null;
+
+          if (raw) {
+            const pieces = splitNumberedQuestions(raw);
+            normalized = pieces.map((p) => ({
+              questionId: `RES-${p.id}`,
+              text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
+              source: data?.source?.toUpperCase?.() || "RESUME",
+              createdAt: null,
+            }));
+          }
+        }
+
+        // ❗ COMMON이 비어 있으면 보강 호출 (백엔드가 분리 API인 경우)
+        if (!ignore && normalized.filter((q) => q.source === "COMMON").length === 0) {
+          try {
+            const { data: commonData } = await axiosInstance.get("/questions/common");
+            if (Array.isArray(commonData)) {
+              normalized = [...normalizeFromArray(commonData), ...normalized];
+            } else if (
+              typeof commonData === "string" ||
+              typeof commonData?.questionsText === "string"
+            ) {
+              const raw =
+                typeof commonData === "string"
+                  ? commonData
+                  : commonData.questionsText;
+              const pieces = splitNumberedQuestions(raw);
+              const extra = pieces.map((p) => ({
+                questionId: `COM-${p.id}`,
+                text: p.text.replace(/^\s*\d+\s*[.)-]\s*/, "").trim(),
+                source: "COMMON",
+                createdAt: null,
+              }));
+              normalized = [...extra, ...normalized];
+            }
+          } catch {
+            // 보강 실패는 무시
+          }
+        }
+
+        if (!ignore) {
+          setAllQuestions(normalized);
+
+          // 기본 탭: COMMON 있으면 COMMON, 아니면 RESUME
+          const hasCommon = normalized.some((q) => q.source === "COMMON");
+          setTab(hasCommon ? "COMMON" : "RESUME");
+        }
+      } catch (e) {
+        console.warn("[QuestionList] fetch error:", e);
+        if (!ignore) {
+          setAllQuestions([]);
+          setLoadError("질문을 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+        }
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [isHydrated, interviewNo]);
+
+  /* === 현재 탭 리스트(표시용 최신순 정렬) === */
+  const currentList = useMemo(() => {
+    const list = allQuestions.filter((q) => q.source === tab);
+    const indexMap = new Map();
+    list.forEach((q, i) => indexMap.set(q.questionId, i));
+
+    return [...list].sort((a, b) => {
+      const ta = guessCreatedAt(a);
+      const tb = guessCreatedAt(b);
+      if (Number.isFinite(ta) && Number.isFinite(tb)) return tb - ta; // 최근 우선
+      if (Number.isFinite(ta)) return -1; // 타임스탬프 있는 쪽을 위로
+      if (Number.isFinite(tb)) return 1;
+      return (indexMap.get(a.questionId) ?? 0) - (indexMap.get(b.questionId) ?? 0);
+    });
+  }, [allQuestions, tab]);
+
+  // 선택 토글 (최대 3개)
+  function toggleChoice(q) {
+    const exists = selected.find((x) => x.questionId === q.questionId);
+    if (exists) setSelected(selected.filter((x) => x.questionId !== q.questionId));
+    else if (selected.length < 3) setSelected([...selected, q]);
+    else alert("최대 3개까지 선택할 수 있어요.");
+  }
+
+  // 2) 커스텀 질문 추가 — 여러 문항 붙여넣기 지원
+  async function addCustom() {
+    const content = draft.trim();
+    if (!content) return;
+
+    const parsed = splitNumberedQuestions(content);
+    const toAdd = parsed.length ? parsed : [{ id: 1, text: content }];
+
+    setBusy(true);
+    try {
+      const { data } = await axiosInstance.post("/questions/custom", { content });
+      if (!data?.success) throw new Error("커스텀 질문 등록 실패");
+
+      const baseId = String(data?.question_no ?? Date.now());
+      const createdAtNow = Date.now();
+      const created = toAdd.map((p) => ({
+        questionId: `${baseId}-${p.id}`,
+        text: p.text,
+        source: "CUSTOM",
+        createdAt: createdAtNow, // 커스텀은 표시용 시간 명확히
+      }));
+
+      setAllQuestions((prev) => [...created, ...prev]);
+      setDraft("");
+      alert(
+        created.length > 1
+          ? `${created.length}개의 커스텀 질문이 추가되었습니다.`
+          : "커스텀 질문이 추가되었습니다."
+      );
+    } catch (e) {
+      console.warn("[QuestionList] add custom error:", e);
+      alert("커스텀 질문 추가에 실패했어요.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // 로컬 삭제(옵션)
+  function removeCustomLocal(q) {
+    setAllQuestions((prev) => prev.filter((x) => x.questionId !== q.questionId));
+    setSelected((prev) => prev.filter((x) => x.questionId !== q.questionId));
+  }
+
+  // 3) 면접 시작
+  function onStart() {
+    if (selected.length === 0) return;
+    if (!interviewNo) {
+      alert("면접 세션이 없습니다. 면접 선택 페이지에서 다시 시작해주세요.");
+      nav("/interview/select");
+      return;
+    }
+
+    // 서버/세션용 페이로드
+    const payload = selected.map((s) => ({
+      questionNO: s.questionId,
+      questionId: s.questionId,
+      questionContent: s.text,
+      questionType: s.source, // COMMON/RESUME/CUSTOM
+    }));
+
+    // ✅ 스토어에도 확정 반영 (앱 전역 재사용)
+    setSelectedQuestions(
+      selected.map((s) => ({
+        questionId: s.questionId,
+        text: s.text,
+        questionType: s.source, // 스토어에도 타입 보존
+        source: s.source,
+      }))
+    );
+    setStep("DEVICES");
+
+    // (선택) 세션 미러링 유지
+    sessionStorage.setItem("selectedQuestions", JSON.stringify(payload));
+
+    nav("/interview/devices", { state: { interviewNo } });
+  }
+
+  const slots = [0, 1, 2].map((i) => selected[i] ?? null);
+
+  // 리스트 패널 (그레이 테두리 & 모던)
+  const ListPanel = (
+    <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
+      <div className="px-6 pb-6">
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <ul className="divide-y divide-gray-100">
+            {loading && currentList.length === 0 && (
+              <li className="p-6 text-sm text-gray-500">불러오는 중…</li>
+            )}
+            {!loading && loadError && (
+              <li className="p-6 text-sm text-red-600">{loadError}</li>
+            )}
+            {!loading && !loadError && currentList.length === 0 && (
+              <li className="p-6 text-sm text-gray-500">불러올 질문이 없습니다.</li>
+            )}
+            {currentList.map((q) => {
+              const checked = selected.some((x) => x.questionId === q.questionId);
+
+              // 표시용 메타
+              const createdAt = guessCreatedAt(q);
+              const isNew = isNewByTime(createdAt); // 최근 24h 이내면 NEW
+              const sourceLabel =
+                q.source === "COMMON" ? "공통"
+                : q.source === "RESUME" ? "자소서"
+                : q.source === "CUSTOM" ? "커스텀"
+                : q.source;
+
+              return (
+                <li
+                  key={`${q.source}-${q.questionId}`}
+                  className={`p-4 flex items-start gap-3 cursor-pointer transition ${
+                    checked ? "bg-[#F8FAFF]" : "bg-white hover:bg-gray-50"
+                  }`}
+                  onClick={() => toggleChoice(q)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleChoice(q)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 h-4 w-4 accent-[#3B82F6]"
+                  />
+
+                  <div className="flex-1 min-w-0">
+                    {/* 첫 줄: 질문 본문 + 태그들 */}
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm text-gray-800 whitespace-pre-line break-words">
+                        {q.text}
+                      </p>
+
+                      {/* 우측 태그 뱃지 영역 */}
+                      <div className="shrink-0 flex items-center gap-2">
+                        {/* 소스 태그 */}
+                        <span className={pillCls("gray")}>{sourceLabel}</span>
+                        {/* NEW 태그 (최근인 경우만) */}
+                        {isNew && <span className={pillCls("blue")}>NEW</span>}
+                      </div>
+                    </div>
+
+                    {/* 둘째 줄: 생성시각 힌트(있으면) */}
+                    {Number.isFinite(createdAt) && (
+                      <div className="mt-1 text-[11px] text-gray-400">
+                        {new Date(createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+
+  // 커스텀 패널 (그레이 테두리 & 모던)
+  const customList = useMemo(
+    () => allQuestions.filter((q) => q.source === "CUSTOM"),
+    [allQuestions]
+  );
+  const CustomPanel = (
+    <section className="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <div className="px-6 pt-5 pb-2 text-xs text-gray-500">선택 가능: 최대 3개</div>
+
+      <div className="px-6">
+        <div className="border border-gray-200 rounded-xl p-4">
+          <textarea
+            placeholder={`직접 질문 입력 (여러 개면 예)\n1) 자기소개를 해주세요\n2. 지원 동기는 무엇인가요?`}
+            className="w-full h-28 border border-gray-200 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="mt-2 w-full flex justify-end">
+            <button
+              onClick={addCustom}
+              disabled={!draft.trim() || busy}
+              className="px-4 h-10 rounded-lg bg-[#2B6CB0] text-white text-sm shadow-sm disabled:opacity-50"
+            >
+              질문 추가
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-6 pb-6">
+        <div className="mt-4 border border-gray-200 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 text-sm font-medium text-gray-700 border-b border-gray-100">
+            내가 만든 질문
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {loading && customList.length === 0 && tab === "CUSTOM" && (
+              <li className="p-6 text-sm text-gray-500">불러오는 중…</li>
+            )}
+            {!loading && loadError && (
+              <li className="p-6 text-sm text-red-600">{loadError}</li>
+            )}
+            {!loading && !loadError && customList.length === 0 && (
+              <li className="p-6 text-sm text-gray-500">등록한 커스텀 질문이 없습니다.</li>
+            )}
+            {customList.map((q) => {
+              const checked = selected.some((x) => x.questionId === q.questionId);
+              const createdAt = guessCreatedAt(q);
+              const isNew = isNewByTime(createdAt);
+
+              return (
+                <li key={`custom-${q.questionId}`} className="p-4 flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleChoice(q)}
+                    className="mt-1 h-4 w-4 accent-[#3B82F6]"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-gray-800 break-words">{q.text}</p>
+                      <div className="shrink-0 flex items-center gap-2">
+                        <span className={pillCls("gray")}>커스텀</span>
+                        {isNew && <span className={pillCls("blue")}>NEW</span>}
+                      </div>
+                    </div>
+                    {Number.isFinite(createdAt) && (
+                      <div className="mt-1 text-[11px] text-gray-400">
+                        {new Date(createdAt).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => removeCustomLocal(q)}
+                    className="px-3 h-8 text-xs rounded bg-white border border-gray-200 hover:bg-gray-50"
+                    disabled={busy}
+                  >
+                    삭제
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </div>
+    </section>
+  );
+
+  return (
+    <div className="min-h-screen w-full bg-[#F7FAFC] flex flex-col">
+      <Header />
+
+      <main className="flex-1">
+        <div className="max-w-[1200px] mx-auto px-4 py-8">
+
+          {/* 상단: 제목 + 유형 뱃지 (그레이 테두리, 모던) */}
+          <section className="bg-white border border-gray-200 rounded-xl shadow-sm mb-6">
+            <div className="p-6 flex items-center justify-between gap-4">
+              {/* 제목 + 입력한 인터뷰 제목을 나란히 표시 */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <h1 className="text-lg font-semibold text-gray-900">인터뷰 질문 선택</h1>
+                {interviewTitle && (
+                  <>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-sm text-gray-700">
+                      <span className="align-middle">제목:</span>{" "}
+                      <strong className="align-middle">{interviewTitle}</strong>
+                    </span>
+                  </>
+                )}
+                <p className="w-full mt-1 text-xs text-gray-500">
+                  최대 3개의 질문을 선택해 면접을 시작하세요.
+                </p>
+              </div>
+
+              {/* 우측: 실전/모의 태그 — 스토어 값 사용 */}
+              {interviewType && (
+                <div className="flex items-center gap-2">
+                  <span className={chipCls(interviewTypeColor)}>{interviewTypeLabel}</span>
+                  <button
+                    type="button"
+                    onClick={() => nav("/interview/select")}
+                    className="text-xs text-blue-600 hover:underline"
+                  >
+                    변경
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* 탭 */}
+          <div className="flex items-center gap-2 mb-4">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`px-4 h-9 rounded-full text-sm border transition ${
+                  tab === t.key
+                    ? "bg-[#2B6CB0] text-white border-[#2B6CB0]"
+                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 좌: 패널 / 우: 요약 */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6">
+            {tab === "CUSTOM" ? CustomPanel : ListPanel}
+
+            {/* 선택 요약 (그레이 테두리) */}
+            <aside className="bg-white border border-gray-200 rounded-xl shadow-sm h-max">
+              <div className="p-6">
+                <h3 className="font-semibold mb-4">선택 요약 ({selected.length}/3)</h3>
+                <div className="space-y-3">
+                  {slots.map((s, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => s && setPreviewText(s.text)}
+                      disabled={!s}
+                      className={`h-10 w-full rounded-lg border border-gray-200 bg-[#F7FAFC] px-3 text-left text-sm transition ${
+                        s
+                          ? "text-gray-700 hover:bg-[#EEF2FF] cursor-pointer"
+                          : "text-gray-400 cursor-not-allowed"
+                      }`}
+                      title={s ? s.text : undefined}
+                    >
+                      <span className="block whitespace-nowrap overflow-hidden text-ellipsis break-words">
+                        {s ? safeTruncate(s.text) : "— (선택 시 표시)"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="mt-5 w-28 h-9 rounded-lg bg-[#2B6CB0] text-white text-sm shadow-sm disabled:opacity-50"
+                  onClick={onStart}
+                  disabled={selected.length === 0}
+                >
+                  면접 시작
+                </button>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </main>
+
+      {/* 전체 보기 모달 */}
+      {previewText !== null && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4"
+          onClick={() => setPreviewText(null)}
+        >
+          <div
+            className="w-full max-w-xl rounded-2xl bg-white shadow-xl border border-gray-200 p-5"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="full-question-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <h4 id="full-question-title" className="text-base font-semibold">
+                전체 질문 보기
+              </h4>
+              <button
+                onClick={() => setPreviewText(null)}
+                className="text-sm text-gray-500 hover:text-gray-800"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-3 max-h-[60vh] overflow-auto">
+              <p className="whitespace-pre-line break-words text-sm text-gray-800">
+                {previewText}
+              </p>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setPreviewText(null)}
+                className="h-9 px-4 rounded-lg bg-[#2B6CB0] text-white text-sm"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* === helper: 칩(태그) 스타일 === */
+function chipCls(color = "blue") {
+  const map = {
+    emerald:
+      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-700",
+    blue:
+      "inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border border-blue-200 bg-blue-50 text-blue-700",
+  };
+  return map[color] || map.blue;
+}
